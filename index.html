@@ -1,0 +1,534 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1">
+<title>מאזן</title>
+<meta name="theme-color" content="#000000">
+<meta name="description" content="מחשבון קלוריות ויומן אכילה יומי">
+<link rel="manifest" href="./manifest.webmanifest">
+<link rel="apple-touch-icon" href="./icons/icon-192.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="מאזן">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Karantina:wght@400;700&family=Heebo:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+:root{
+  --state:#0F6B4F;
+  --page:#E7E9E6; --white:#FFFFFF; --black:#000000;
+  --mut:#6B6F6B; --mut2:#9DA29C; --line:#DCDFDA;
+  --carb:#000000; --prot:#6B6F6B; --fat:#B9BDB7;
+  --bad:#A62B22;
+  --bar-h:calc(60px + env(safe-area-inset-bottom));
+}
+html[data-state="near"]{--state:#C97A00}
+html[data-state="over"]{--state:#A62B22}
+
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;padding:0;height:100%}
+body{background:var(--page);color:var(--black);
+  font-family:'Heebo','Assistant',system-ui,'Segoe UI',Arial,sans-serif;
+  font-size:15px;line-height:1.5;-webkit-font-smoothing:antialiased}
+.dsp{font-family:'Karantina','Heebo',system-ui,sans-serif;font-weight:700;letter-spacing:0}
+
+.app{max-width:460px;margin:0 auto;min-height:100%;background:var(--page);
+  padding-bottom:var(--bar-h);position:relative}
+@media(min-width:900px){
+  .app{max-width:420px;min-height:calc(100vh - 40px);margin:20px auto;overflow:hidden;
+    box-shadow:0 30px 80px rgba(0,0,0,.22)}
+  .tabbar,.fab{position:absolute!important}
+}
+
+/* ---------- top bar ---------- */
+.topbar{position:sticky;top:0;z-index:20;background:var(--black);color:#fff;
+  padding:calc(12px + env(safe-area-inset-top)) 16px 12px}
+.topbar .row{display:flex;align-items:center;justify-content:space-between;gap:10px}
+.topbar h1{margin:0;font-family:'Karantina','Heebo',sans-serif;font-weight:700;font-size:30px;line-height:1}
+.topbar .sub{font-size:12px;color:#A8ADA6;margin-top:2px}
+.iconbtn{background:#fff;border:0;color:#000;border-radius:999px;padding:7px 14px;
+  font:inherit;font-size:13px;font-weight:700;cursor:pointer}
+.iconbtn:active{transform:scale(.96)}
+.datebar{display:flex;align-items:center;justify-content:center;gap:2px;margin-top:10px}
+.datebar button{background:none;border:0;color:#fff;width:30px;height:30px;font-size:17px;cursor:pointer}
+.datebar button:disabled{opacity:.3}
+.datebar .lbl{min-width:140px;text-align:center;font-size:13px;font-weight:500;color:#D8DBD6}
+
+main{padding:0 0 22px}
+.screen[hidden]{display:none}
+.pad{padding:0 14px}
+
+/* ---------- hero ---------- */
+.hero{background:var(--state);color:#fff;padding:26px 20px 22px;transition:background .5s ease}
+.hero .num{display:flex;align-items:baseline;gap:10px}
+.hero .num b{font-family:'Karantina','Heebo',sans-serif;font-weight:700;
+  font-size:clamp(76px,25vw,112px);line-height:.78;letter-spacing:-.01em;font-variant-numeric:tabular-nums}
+.hero .num span{font-size:15px;opacity:.85;font-weight:500}
+.prog{height:4px;background:rgba(255,255,255,.28);margin-top:20px}
+.prog i{display:block;height:100%;background:#fff;width:0;transition:width .7s cubic-bezier(.22,1,.36,1)}
+.eq{display:flex;margin-top:14px}
+.eq div{flex:1}
+.eq div + div{border-inline-start:1px solid rgba(255,255,255,.28);padding-inline-start:12px}
+.eq div + div{margin-inline-start:12px}
+.eq span{display:block;font-size:12px;opacity:.8}
+.eq b{font-size:19px;font-weight:700;font-variant-numeric:tabular-nums}
+
+/* ---------- blocks ---------- */
+.block{background:var(--white);padding:18px 16px;margin-top:10px}
+.block:first-child{margin-top:0}
+.bhead{display:flex;align-items:baseline;justify-content:space-between;gap:10px;margin-bottom:12px}
+.bhead h2{margin:0;font-family:'Karantina','Heebo',sans-serif;font-weight:700;font-size:23px;line-height:1}
+.bhead a,.bhead span{color:var(--mut);font-size:13px;text-decoration:none;cursor:pointer}
+.bhead a{color:var(--black);font-weight:700}
+
+/* ---------- quick actions ---------- */
+.quick{display:grid;grid-template-columns:1fr 1fr;gap:2px;background:var(--line)}
+.qtile{background:var(--white);border:0;padding:18px 10px;display:flex;flex-direction:column;
+  align-items:center;gap:10px;cursor:pointer;font-family:'Karantina','Heebo',sans-serif;
+  font-size:20px;font-weight:700;color:var(--black)}
+.qtile:active{background:#F2F3F1}
+.qi{width:40px;height:40px;border-radius:50%;display:grid;place-items:center;background:var(--black)}
+.qi svg{width:20px;height:20px;stroke:#fff;fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+.qi.b,.qi.r,.qi.t,.qi.a{background:var(--black)}
+
+/* ---------- macros ---------- */
+.macrow{display:flex;align-items:center;gap:16px}
+.donut{width:96px;height:96px;flex:0 0 auto;position:relative}
+.donut svg{transform:rotate(-90deg) scaleX(-1)}
+.donut .mid{position:absolute;inset:0;display:grid;place-content:center;text-align:center}
+.donut .mid b{font-family:'Karantina','Heebo',sans-serif;font-weight:700;font-size:26px;line-height:1;font-variant-numeric:tabular-nums}
+.donut .mid span{font-size:11px;color:var(--mut)}
+.mlist{flex:1;display:grid;gap:11px}
+.mitem .top{display:flex;align-items:center;gap:7px;font-size:13px;color:var(--mut);margin-bottom:5px}
+.dot{width:9px;height:9px;flex:0 0 auto}
+.mitem .top b{margin-inline-start:auto;color:var(--black);font-size:13px;font-weight:600;font-variant-numeric:tabular-nums}
+.track{height:5px;background:var(--line);overflow:hidden}
+.track i{display:block;height:100%;transition:width .5s cubic-bezier(.22,1,.36,1)}
+
+/* ---------- water ---------- */
+.water{display:flex;align-items:center;gap:7px;flex-wrap:wrap}
+.cup{width:26px;height:34px;border:2px solid var(--line);background:#fff;cursor:pointer;padding:0;
+  clip-path:polygon(0 0,100% 0,86% 100%,14% 100%)}
+.cup.on{border-color:var(--black);background:var(--black)}
+.waterlbl{margin-inline-start:auto;font-size:13px;color:var(--mut);font-variant-numeric:tabular-nums}
+
+/* ---------- diary ---------- */
+.meal{background:var(--white);padding:18px 16px;margin-top:10px}
+.mhead{display:flex;align-items:baseline;justify-content:space-between;gap:10px}
+.mhead h3{margin:0;font-family:'Karantina','Heebo',sans-serif;font-weight:700;font-size:23px;line-height:1}
+.mhead .k{color:var(--mut);font-size:14px;font-variant-numeric:tabular-nums}
+.items{list-style:none;margin:12px 0 0;padding:0}
+.items li{display:flex;align-items:center;gap:10px;padding:8px 0}
+.items li + li{border-top:1px solid var(--line)}
+.items .nm{flex:1;min-width:0}
+.items .nm b{display:block;font-weight:500;font-size:15px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.items .nm span{color:var(--mut);font-size:12px}
+.items .num{font-weight:700;font-size:15px;font-variant-numeric:tabular-nums}
+.del{background:none;border:0;color:var(--mut2);font-size:15px;cursor:pointer;padding:5px}
+.del:active{color:var(--bad)}
+.addlink{margin-top:12px;background:none;border:0;color:var(--black);font:inherit;font-size:14px;
+  font-weight:700;cursor:pointer;padding:0;border-bottom:2px solid var(--black)}
+.totals{display:flex;background:var(--black);color:#fff;margin-top:10px}
+.totals div{flex:1;padding:14px 6px;text-align:center}
+.totals div + div{border-inline-start:1px solid rgba(255,255,255,.2)}
+.totals b{display:block;font-family:'Karantina','Heebo',sans-serif;font-weight:700;font-size:26px;line-height:1.1;font-variant-numeric:tabular-nums}
+.totals span{font-size:11px;color:#B7BCB6}
+.totals .rem b{color:#fff}
+
+/* ---------- progress ---------- */
+.chart{display:flex;align-items:flex-end;gap:5px;height:150px;position:relative;margin-top:6px}
+.col{flex:1;display:flex;flex-direction:column;align-items:center;gap:6px;height:100%;background:none;border:0;padding:0;cursor:pointer}
+.stack{flex:1;width:100%;display:flex;align-items:flex-end}
+.fill{width:100%;background:var(--black);min-height:3px;transition:height .6s cubic-bezier(.22,1,.36,1)}
+.fill.over{background:var(--bad)}
+.col .d{font-size:12px;color:var(--mut)}
+.col.today .d{color:var(--black);font-weight:700}
+.goalline{position:absolute;inset-inline:0;border-top:2px dashed var(--mut2)}
+.goalline span{position:absolute;inset-inline-end:0;top:-16px;font-size:10.5px;color:var(--mut);background:#fff;padding:0 4px}
+.kpi{display:flex;margin-top:16px;border-top:1px solid var(--line);padding-top:14px}
+.kpi div{flex:1;text-align:center}
+.kpi div + div{border-inline-start:1px solid var(--line)}
+.kpi b{display:block;font-family:'Karantina','Heebo',sans-serif;font-weight:700;font-size:28px;line-height:1;font-variant-numeric:tabular-nums}
+.kpi span{font-size:11.5px;color:var(--mut)}
+.spark svg{width:100%;height:88px;display:block;margin-top:6px}
+.sparkfoot{display:flex;justify-content:space-between;color:var(--mut);font-size:12px;margin-top:8px}
+
+/* ---------- forms ---------- */
+.form{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+.form .wide{grid-column:1 / -1}
+.field label{display:block;font-size:12.5px;color:var(--mut);margin-bottom:5px}
+input,select{width:100%;background:#fff;border:0;border-bottom:2px solid var(--line);color:var(--black);
+  border-radius:0;padding:9px 2px;font:inherit;font-size:16px;outline:none}
+input:focus,select:focus{border-bottom-color:var(--black)}
+select{appearance:none;background-image:linear-gradient(45deg,transparent 50%,var(--mut) 50%),linear-gradient(135deg,var(--mut) 50%,transparent 50%);
+  background-position:left 8px top 20px,left 3px top 20px;background-size:5px 5px;background-repeat:no-repeat}
+.seg{display:flex;gap:2px;background:var(--line)}
+.seg button{flex:1;background:#fff;border:0;color:var(--mut);padding:11px 2px;cursor:pointer;font:inherit;font-size:14.5px}
+.seg button[aria-pressed="true"]{background:var(--black);color:#fff;font-weight:700}
+.stats{display:grid;grid-template-columns:1fr 1fr;gap:1px;background:var(--line);margin-top:18px}
+.stat{background:#fff;padding:13px 14px}
+.stat .k{font-size:11.5px;color:var(--mut)}
+.stat .v{font-family:'Karantina','Heebo',sans-serif;font-weight:700;font-size:27px;line-height:1.1;font-variant-numeric:tabular-nums}
+.stat .v small{font-family:'Heebo',sans-serif;font-size:11.5px;font-weight:400;color:var(--mut);margin-inline-start:4px}
+.note{margin:14px 0 0;padding:12px 14px;font-size:13px;color:#7A4A00;background:#FCF3E2}
+.note[hidden]{display:none}
+.btn{width:100%;background:var(--black);border:0;color:#fff;font:inherit;font-size:15px;font-weight:700;
+  padding:14px;border-radius:999px;cursor:pointer}
+.btn:active{opacity:.85}
+.btn.sec{background:#fff;color:var(--black);box-shadow:inset 0 0 0 2px var(--black)}
+.btnrow{margin-top:16px}
+.legalnote{color:var(--mut);font-size:11.5px;text-align:center;margin:16px 14px 0;line-height:1.6}
+
+/* ---------- camera ---------- */
+.cam{position:fixed;inset:0;z-index:70;background:#000}
+.cam[hidden]{display:none}
+.cam video{width:100%;height:100%;object-fit:cover}
+.camui{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:space-between;
+  padding:calc(16px + env(safe-area-inset-top)) 16px calc(24px + env(safe-area-inset-bottom))}
+.camtop{width:100%;display:flex;align-items:center;justify-content:space-between;color:#fff}
+.camtop button{background:#fff;border:0;color:#000;font:inherit;font-size:14px;font-weight:700;
+  padding:8px 16px;border-radius:999px;cursor:pointer}
+.frame{width:76%;max-width:300px;aspect-ratio:1.6;border:3px solid #fff;box-shadow:0 0 0 2000px rgba(0,0,0,.5)}
+.camhint{color:#fff;font-size:14px;text-align:center;background:rgba(0,0,0,.55);padding:9px 16px}
+
+/* ---------- meal scan ---------- */
+.scanbox{border:2px dashed var(--line);padding:24px 16px;text-align:center;color:var(--mut);font-size:13.5px}
+.mealitem{display:flex;align-items:center;gap:10px;padding:11px 0;border-bottom:1px solid var(--line)}
+.mealitem input[type=checkbox]{width:19px;height:19px;flex:0 0 auto;accent-color:#000}
+.mealitem .nm{flex:1}
+.mealitem .nm b{display:block;font-size:14.5px;font-weight:500}
+.mealitem .nm span{color:var(--mut);font-size:12px}
+.mealitem .kc{font-size:15px;font-weight:700;font-variant-numeric:tabular-nums}
+.spin{display:inline-block;width:16px;height:16px;border:2px solid var(--line);border-top-color:#000;
+  border-radius:50%;animation:sp .8s linear infinite;vertical-align:-3px;margin-inline-end:7px}
+@keyframes sp{to{transform:rotate(360deg)}}
+
+/* ---------- bottom nav ---------- */
+.tabbar{position:fixed;bottom:0;inset-inline:0;max-width:460px;margin:0 auto;z-index:30;height:var(--bar-h);
+  padding-bottom:env(safe-area-inset-bottom);display:grid;grid-template-columns:1fr 1fr 66px 1fr 1fr;
+  align-items:center;background:#fff;border-top:1px solid var(--line)}
+.tab{background:none;border:0;color:var(--mut2);font:inherit;font-size:10.5px;cursor:pointer;
+  display:flex;flex-direction:column;align-items:center;gap:3px;height:100%;justify-content:center;padding:0}
+.tab svg{width:21px;height:21px;stroke:currentColor;fill:none;stroke-width:1.9;stroke-linecap:round;stroke-linejoin:round}
+.tab[aria-current="page"]{color:var(--black);font-weight:700}
+.tab[aria-current="page"] svg{stroke-width:2.4}
+.fab{position:fixed;bottom:calc(var(--bar-h) - 22px);left:50%;transform:translateX(-50%);z-index:31;
+  width:56px;height:56px;border-radius:50%;border:0;background:var(--black);color:#fff;font-size:28px;font-weight:300;
+  cursor:pointer;display:grid;place-items:center;box-shadow:0 0 0 5px #fff}
+.fab:active{transform:translateX(-50%) scale(.93)}
+
+/* ---------- sheet ---------- */
+.scrim{position:fixed;inset:0;z-index:50;background:rgba(0,0,0,.5);display:flex;align-items:flex-end;justify-content:center}
+.scrim[hidden]{display:none}
+.sheet{width:min(460px,100%);max-height:92vh;display:flex;flex-direction:column;background:#fff;
+  padding-bottom:env(safe-area-inset-bottom);animation:up .26s cubic-bezier(.22,1,.36,1)}
+@keyframes up{from{transform:translateY(100%)}}
+.sheet .sh{display:flex;align-items:center;justify-content:space-between;padding:16px;background:var(--black);color:#fff}
+.sheet .sh h3{margin:0;font-family:'Karantina','Heebo',sans-serif;font-weight:700;font-size:24px;line-height:1}
+.sheet .sh button{background:none;border:0;color:#fff;font:inherit;font-size:14px;font-weight:600;cursor:pointer}
+.tabs{display:flex;background:var(--line);gap:1px}
+.tabs button{flex:1;background:#fff;border:0;color:var(--mut);font:inherit;font-size:13.5px;padding:12px 2px;cursor:pointer}
+.tabs button[aria-selected="true"]{color:var(--black);font-weight:700;box-shadow:inset 0 -3px 0 var(--black)}
+.sbody{padding:16px;overflow:auto;-webkit-overflow-scrolling:touch}
+.results{list-style:none;margin:12px 0 0;padding:0}
+.results li{display:flex;align-items:center;gap:10px;padding:12px 2px;border-bottom:1px solid var(--line);cursor:pointer}
+.results li:active{background:#F2F3F1}
+.results .nm{flex:1}
+.results .nm b{display:block;font-weight:500;font-size:15px}
+.results .nm span{color:var(--mut);font-size:12px}
+.results .kc{color:var(--mut);font-size:12.5px;white-space:nowrap;font-variant-numeric:tabular-nums}
+.picked{background:#F5F6F4;padding:14px;margin-top:14px}
+.picked h4{margin:0 0 12px;font-family:'Karantina','Heebo',sans-serif;font-weight:700;font-size:22px;line-height:1}
+.qty{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.preview{display:flex;gap:16px;flex-wrap:wrap;margin-top:14px;font-size:12px;color:var(--mut)}
+.preview b{display:block;color:var(--black);font-family:'Karantina','Heebo',sans-serif;font-weight:700;
+  font-size:22px;line-height:1.1;font-variant-numeric:tabular-nums}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:12px}
+.toast{position:fixed;bottom:calc(var(--bar-h) + 14px);left:50%;transform:translate(-50%,12px);background:var(--black);
+  color:#fff;padding:12px 18px;font-size:14px;opacity:0;pointer-events:none;
+  transition:opacity .2s,transform .2s;z-index:60}
+.toast.show{opacity:1;transform:translate(-50%,0)}
+:focus-visible{outline:3px solid var(--black);outline-offset:2px}
+@media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+</style>
+</head>
+<body>
+<div class="app">
+  <div class="topbar">
+    <div class="row">
+      <div><h1 id="barTitle">מאזן</h1><div class="sub" id="barSub">סקירת היום</div></div>
+      <button class="iconbtn" id="installBtn" hidden>התקנה</button>
+    </div>
+    <div class="datebar" id="dateBar">
+      <button id="prevDay" aria-label="יום קודם">›</button>
+      <div class="lbl" id="dateLabel">היום</div>
+      <button id="nextDay" aria-label="יום הבא">‹</button>
+    </div>
+  </div>
+
+  <main>
+    <!-- ============ HOME ============ -->
+    <section class="screen" id="scr-home">
+      <section class="hero">
+        <div class="num"><b id="remain">0</b><span id="remainCap">נותרו</span></div>
+        <div class="prog"><i id="progFill"></i></div>
+        <div class="eq">
+          <div><span>יעד</span><b id="eqGoal">0</b></div>
+          <div><span>אכלת</span><b id="eqFood">0</b></div>
+          <div><span>שרפת</span><b id="eqEx">0</b></div>
+        </div>
+        <svg width="0" height="0" style="position:absolute" aria-hidden="true"><circle id="ringFg" r="57"/></svg>
+      </section>
+
+      <div class="quick">
+        <button class="qtile" data-act="search"><span class="qi b"><svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg></span>חיפוש מאכל</button>
+        <button class="qtile" data-act="barcode"><span class="qi r"><svg viewBox="0 0 24 24"><path d="M4 8V5.5A1.5 1.5 0 0 1 5.5 4H8M16 4h2.5A1.5 1.5 0 0 1 20 5.5V8M20 16v2.5a1.5 1.5 0 0 1-1.5 1.5H16M8 20H5.5A1.5 1.5 0 0 1 4 18.5V16"/><path d="M8 9v6M11 9v6M14 9v6M17 9v6"/></svg></span>סריקת ברקוד</button>
+        <button class="qtile" data-act="meal"><span class="qi t"><svg viewBox="0 0 24 24"><path d="M4 8V6a2 2 0 0 1 2-2h2M16 4h2a2 2 0 0 1 2 2v2M20 16v2a2 2 0 0 1-2 2h-2M8 20H6a2 2 0 0 1-2-2v-2"/><circle cx="12" cy="12" r="3.2"/></svg></span>צילום מנה</button>
+        <button class="qtile" data-act="ex"><span class="qi a"><svg viewBox="0 0 24 24"><path d="M12 3s4.5 4 4.5 8a4.5 4.5 0 0 1-9 0c0-1.6.7-3 1.5-4 .2 1.2.9 2 1.8 2 1.2 0 1.5-1.4 1.2-6Z"/></svg></span>פעילות</button>
+      </div>
+
+      <div class="block">
+        <div class="bhead"><h2>מאקרו־נוטריאנטים</h2></div>
+        <div class="macrow">
+          <div class="donut">
+            <svg viewBox="0 0 104 104" width="104" height="104" aria-hidden="true">
+              <circle cx="52" cy="52" r="44" fill="none" stroke="#EAECF0" stroke-width="11"/>
+              <circle id="dC" cx="52" cy="52" r="44" fill="none" stroke="var(--carb)" stroke-width="11" stroke-dasharray="0 999"/>
+              <circle id="dP" cx="52" cy="52" r="44" fill="none" stroke="var(--prot)" stroke-width="11" stroke-dasharray="0 999"/>
+              <circle id="dF" cx="52" cy="52" r="44" fill="none" stroke="var(--fat)" stroke-width="11" stroke-dasharray="0 999"/>
+            </svg>
+            <div class="mid"><b id="dKcal">0</b><span>קק״ל</span></div>
+          </div>
+          <div class="mlist">
+            <div class="mitem"><div class="top"><i class="dot" style="background:var(--carb)"></i>פחמימות<b id="cTxt">0 / 0 ג׳</b></div><div class="track"><i id="cBar" style="background:var(--carb)"></i></div></div>
+            <div class="mitem"><div class="top"><i class="dot" style="background:var(--prot)"></i>חלבון<b id="pTxt">0 / 0 ג׳</b></div><div class="track"><i id="pBar" style="background:var(--prot)"></i></div></div>
+            <div class="mitem"><div class="top"><i class="dot" style="background:var(--fat)"></i>שומן<b id="fTxt">0 / 0 ג׳</b></div><div class="track"><i id="fBar" style="background:var(--fat)"></i></div></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="block">
+        <div class="bhead"><h2>מים</h2></div>
+        <div class="water" id="water"></div>
+      </div>
+
+      <div class="block">
+        <div class="bhead"><h2>הוספה מהירה</h2></div>
+        <div class="water" id="recents" style="gap:8px"></div>
+      </div>
+    </section>
+
+    <!-- ============ DIARY ============ -->
+    <section class="screen" id="scr-diary" hidden>
+      <div id="meals"></div>
+      <div>
+        <div class="totals">
+          <div><b id="tFood">0</b><span>נאכלו</span></div>
+          <div><b id="tGoal">0</b><span>יעד</span></div>
+          <div><b id="tEx">0</b><span>פעילות</span></div>
+          <div class="rem"><b id="tRem">0</b><span>נותרו</span></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ PROGRESS ============ -->
+    <section class="screen" id="scr-prog" hidden>
+      <div class="block">
+        <div class="bhead"><h2>7 הימים האחרונים</h2><span style="font-size:12px;color:var(--mut)">הקש על יום</span></div>
+        <div class="chart" id="chart"></div>
+        <div class="kpi">
+          <div><b id="kAvg">0</b><span>ממוצע יומי</span></div>
+          <div><b id="kIn">0</b><span>ימים ביעד</span></div>
+          <div><b id="kLogged">0</b><span>ימים שנרשמו</span></div>
+        </div>
+      </div>
+      <div class="block">
+        <div class="bhead"><h2>משקל</h2><span id="wDelta" style="font-size:12px;color:var(--mut)"></span></div>
+        <div class="spark">
+          <svg id="spark" viewBox="0 0 300 88" preserveAspectRatio="none" aria-hidden="true"></svg>
+          <div class="sparkfoot"><span id="wFirst"></span><span id="wLast"></span></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ PROFILE ============ -->
+    <section class="screen" id="scr-me" hidden>
+      <div class="block">
+        <div class="bhead"><h2>חשבון וסנכרון</h2><span id="acctSync" style="font-size:12px;color:var(--mut)"></span></div>
+
+        <div class="form" id="acctSetup">
+          <p style="grid-column:1/-1;margin:0;font-size:13px;color:var(--mut);line-height:1.6">
+            כדי לסנכרן בין מכשירים צריך פרויקט Supabase. פתח פרויקט חינמי,
+            והעתק מ‑Project Settings → API את שתי השורות האלה.
+            ה‑anon key מיועד לחשיפה פומבית — ההגנה על הנתונים היא מדיניות ה‑RLS.
+          </p>
+          <div class="field wide"><label for="sbUrl">Project URL</label>
+            <input id="sbUrl" type="url" placeholder="https://xxxxx.supabase.co" autocomplete="off"></div>
+          <div class="field wide"><label for="sbKey">Anon public key</label>
+            <input id="sbKey" placeholder="eyJhbGciOi..." autocomplete="off"></div>
+          <div class="field wide"><button class="btn" id="sbSave">שמירת החיבור</button></div>
+        </div>
+
+        <div class="form" id="acctOut" hidden>
+          <div class="field wide"><label for="acctMail">אימייל</label>
+            <input id="acctMail" type="email" autocomplete="email" placeholder="you@example.com"></div>
+          <div class="field wide"><label for="acctPass">סיסמה</label>
+            <input id="acctPass" type="password" autocomplete="current-password" placeholder="לפחות 6 תווים"></div>
+          <div class="field"><button class="btn" id="btnSignIn">כניסה</button></div>
+          <div class="field"><button class="btn sec" id="btnSignUp">הרשמה</button></div>
+          <p style="grid-column:1/-1;margin:0;font-size:12px;color:var(--mut2)">
+            בלי חשבון האפליקציה עובדת רגיל, והנתונים נשמרים על המכשיר הזה בלבד.
+          </p>
+        </div>
+
+        <div class="form" id="acctIn" hidden>
+          <div class="field wide" style="display:flex;align-items:center;gap:10px">
+            <span style="width:36px;height:36px;border-radius:50%;background:var(--blue-soft);color:var(--blue);
+              display:grid;place-items:center;font-weight:800">✓</span>
+            <span><b id="acctEmail" style="font-size:14.5px"></b>
+            <span style="display:block;font-size:12px;color:var(--mut)">הנתונים מסונכרנים בין המכשירים שלך</span></span>
+          </div>
+          <div class="field"><button class="btn sec" id="btnSyncNow">סנכרון עכשיו</button></div>
+          <div class="field"><button class="btn sec" id="btnSignOut">יציאה</button></div>
+        </div>
+      </div>
+
+      <div class="block">
+        <div class="bhead"><h2>פרטי המתאמן</h2></div>
+        <div class="form">
+          <div class="field wide"><label>מין</label>
+            <div class="seg" id="sexSeg">
+              <button type="button" data-v="male" aria-pressed="true">גבר</button>
+              <button type="button" data-v="female" aria-pressed="false">אישה</button>
+            </div>
+          </div>
+          <div class="field"><label for="age">גיל</label><input id="age" type="number" min="14" max="99" value="28" inputmode="numeric"></div>
+          <div class="field"><label for="height">גובה (ס״מ)</label><input id="height" type="number" min="120" max="220" value="178" inputmode="numeric"></div>
+          <div class="field wide"><label for="weight">משקל נוכחי (ק״ג)</label><input id="weight" type="number" min="35" max="250" step="0.1" value="80" inputmode="decimal"></div>
+          <div class="field wide"><label for="activity">רמת פעילות</label>
+            <select id="activity">
+              <option value="1.2">יושבני — כמעט בלי אימונים</option>
+              <option value="1.375">קלה — 1–3 אימונים בשבוע</option>
+              <option value="1.55" selected>בינונית — 3–5 אימונים בשבוע</option>
+              <option value="1.725">גבוהה — 6–7 אימונים בשבוע</option>
+              <option value="1.9">מאוד גבוהה — עבודה פיזית או אימון כפול</option>
+            </select>
+          </div>
+          <div class="field wide"><label for="goal">מטרה</label>
+            <select id="goal">
+              <option value="-1">ירידה מהירה — 1 ק״ג בשבוע</option>
+              <option value="-0.5" selected>ירידה מתונה — 0.5 ק״ג בשבוע</option>
+              <option value="-0.25">ירידה איטית — 0.25 ק״ג בשבוע</option>
+              <option value="0">שמירה על המשקל</option>
+              <option value="0.25">עלייה מבוקרת — 0.25 ק״ג בשבוע</option>
+              <option value="0.5">עלייה במסה — 0.5 ק״ג בשבוע</option>
+            </select>
+          </div>
+          <div class="field wide"><label for="apiUrl">שרת זיהוי מנות (אופציונלי)</label>
+            <input id="apiUrl" type="url" placeholder="https://xxx.workers.dev" autocomplete="off" inputmode="url"></div>
+        </div>
+        <div class="stats">
+          <div class="stat"><div class="k">חילוף חומרים במנוחה</div><div class="v" id="sBmr">—</div></div>
+          <div class="stat"><div class="k">שריפה יומית כוללת</div><div class="v" id="sTdee">—</div></div>
+          <div class="stat"><div class="k">היעד היומי</div><div class="v" id="sTarget">—</div></div>
+          <div class="stat"><div class="k">BMI</div><div class="v" id="sBmi">—</div></div>
+          <div class="stat"><div class="k">מים מומלצים</div><div class="v" id="sWater">—</div></div>
+          <div class="stat"><div class="k">יעד חלבון</div><div class="v" id="sProt">—</div></div>
+        </div>
+        <p class="note" id="floorNote" hidden></p>
+        <div class="btnrow"><button class="btn sec" id="logWeight">רישום המשקל להיום</button></div>
+      </div>
+      <p class="legalnote">המספרים הם הערכה סטטיסטית ואינם ייעוץ תזונתי.<br>כל הנתונים נשמרים במכשיר שלך בלבד.</p>
+    </section>
+  </main>
+
+  <nav class="tabbar">
+    <button class="tab" data-scr="home" aria-current="page">
+      <svg viewBox="0 0 24 24"><path d="M3 10.5 12 3l9 7.5"/><path d="M5.5 9.5V20h13V9.5"/></svg>בית</button>
+    <button class="tab" data-scr="diary">
+      <svg viewBox="0 0 24 24"><rect x="4" y="3.5" width="16" height="17" rx="2.5"/><path d="M8 8h8M8 12h8M8 16h5"/></svg>יומן</button>
+    <span></span>
+    <button class="tab" data-scr="prog">
+      <svg viewBox="0 0 24 24"><path d="M4 19V9M10 19V5M16 19v-6M21 19H3"/></svg>התקדמות</button>
+    <button class="tab" data-scr="me">
+      <svg viewBox="0 0 24 24"><circle cx="12" cy="8" r="3.4"/><path d="M4.8 20a7.2 7.2 0 0 1 14.4 0"/></svg>פרופיל</button>
+  </nav>
+  <button class="fab" id="fab" aria-label="הוספה">＋</button>
+</div>
+
+<div class="scrim" id="scrim" hidden>
+  <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="mTitle">
+    <div class="sh"><h3 id="mTitle">הוספה ליומן</h3><button id="closeSheet">סגירה</button></div>
+    <div class="tabs" role="tablist">
+      <button role="tab" id="tabSearch" aria-selected="true">מאכלים</button>
+      <button role="tab" id="tabNew" aria-selected="false">מאכל חדש</button>
+      <button role="tab" id="tabEx" aria-selected="false">פעילות</button>
+      <button role="tab" id="tabMeal" aria-selected="false">צילום</button>
+    </div>
+    <div class="sbody">
+      <div id="paneSearch">
+        <div class="field"><label for="mealSel">ארוחה</label><select id="mealSel"></select></div>
+        <input id="q" type="search" placeholder="חפש — פיתה, חזה עוף, קוטג׳…" autocomplete="off" style="margin-top:10px">
+        <ul class="results" id="results"></ul>
+        <div class="picked" id="picked" hidden>
+          <h4 id="pickedName"></h4>
+          <div class="qty">
+            <div class="field"><label for="amount">כמות</label><input id="amount" type="number" min="0" step="1" value="100" inputmode="decimal"></div>
+            <div class="field"><label for="unit">יחידה</label><select id="unit"></select></div>
+          </div>
+          <div class="preview">
+            <div>קלוריות<b id="pvKcal">0</b></div><div>פחמימות<b id="pvC">0</b></div>
+            <div>חלבון<b id="pvP">0</b></div><div>שומן<b id="pvF">0</b></div>
+          </div>
+          <button class="btn" id="addPicked" style="margin-top:12px">הוספה ליומן</button>
+        </div>
+      </div>
+
+      <div id="paneNew" hidden>
+        <div class="field"><label for="nName">שם המאכל</label><input id="nName" placeholder="למשל: הסלט של אמא"></div>
+        <div class="grid2">
+          <div class="field"><label for="nKcal">קלוריות / 100 ג׳</label><input id="nKcal" type="number" min="0" inputmode="decimal"></div>
+          <div class="field"><label for="nC">פחמימות / 100 ג׳</label><input id="nC" type="number" min="0" step="0.1" inputmode="decimal"></div>
+          <div class="field"><label for="nP">חלבון / 100 ג׳</label><input id="nP" type="number" min="0" step="0.1" inputmode="decimal"></div>
+          <div class="field"><label for="nF">שומן / 100 ג׳</label><input id="nF" type="number" min="0" step="0.1" inputmode="decimal"></div>
+        </div>
+        <button class="btn" id="saveNew" style="margin-top:12px">שמירה למאגר</button>
+      </div>
+
+      <div id="paneEx" hidden>
+        <div class="field"><label for="exName">סוג הפעילות</label><input id="exName" placeholder="ריצה, חדר כושר, הליכה…"></div>
+        <div class="grid2">
+          <div class="field"><label for="exMin">דקות</label><input id="exMin" type="number" min="0" inputmode="numeric" placeholder="45"></div>
+          <div class="field"><label for="exKcal">קלוריות שנשרפו</label><input id="exKcal" type="number" min="0" inputmode="numeric" placeholder="350"></div>
+        </div>
+        <button class="btn" id="addEx" style="margin-top:12px">הוספה ליומן</button>
+      </div>
+
+      <div id="paneMeal" hidden>
+        <div class="field"><label for="mealSel2">ארוחה</label><select id="mealSel2"></select></div>
+        <div class="scanbox" id="scanBox" style="margin-top:12px">
+          צלם את הצלחת או בחר תמונה מהגלריה,<br>ואזהה את המרכיבים ואעריך את הערכים.
+        </div>
+        <button class="btn" id="shootMeal" style="margin-top:12px">צילום או בחירת תמונה</button>
+        <div id="mealResult" style="margin-top:14px"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="cam" id="cam" hidden>
+  <video id="camVideo" playsinline muted autoplay></video>
+  <div class="camui">
+    <div class="camtop"><button id="camClose">סגירה</button><span id="camTitle" style="font-weight:600">סריקת ברקוד</span><span style="width:64px"></span></div>
+    <div class="frame"></div>
+    <div class="camhint" id="camHint">כוון את הברקוד למסגרת</div>
+  </div>
+</div>
+<input type="file" id="mealFile" accept="image/*" capture="environment" hidden>
+
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+<script src="./cloud.js"></script>
+<script src="./app.js"></script>
+</body>
+</html>
