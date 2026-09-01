@@ -1,0 +1,601 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1">
+<title>מאזן</title>
+<meta name="theme-color" content="#131620">
+<meta name="description" content="מחשבון קלוריות ויומן אכילה יומי">
+<link rel="manifest" href="./manifest.webmanifest">
+<link rel="apple-touch-icon" href="./icons/icon-192.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="מאזן">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Rubik:wght@300;400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  /* --- surface --- */
+  --bg:#131620;
+  --surface:rgba(255,255,255,.045);
+  --surface-2:rgba(255,255,255,.075);
+  --edge:rgba(255,255,255,.085);
+  --edge-strong:rgba(255,255,255,.16);
+
+  /* --- text --- */
+  --text:#E7E9F2;
+  --mut:#9BA2B8;
+  --mut2:#6E7690;
+
+  /* --- macros --- */
+  --carb:#7AA2F7;
+  --prot:#BB9AF7;
+  --fat:#F0967F;
+
+  /* --- state --- */
+  --state:#5CD2A4;
+  --bad:#FF6B6B;
+
+  /* --- type scale --- */
+  --t-micro:12.5px; --t-small:13.5px; --t-body:15px; --t-lead:17px;
+  --t-h3:19px; --t-h2:22px; --t-num:28px; --t-hero:46px;
+
+  --bar-h:calc(62px + env(safe-area-inset-bottom));
+  --r:20px; --r-sm:13px;
+}
+html[data-state="near"]{--state:#E5B36A}
+html[data-state="over"]{--state:#FF6B6B}
+
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;padding:0;height:100%}
+body{background:var(--bg);color:var(--text);
+  font-family:'Rubik','Heebo',system-ui,'Segoe UI',Arial,sans-serif;
+  font-size:var(--t-body);line-height:1.55;font-weight:400;-webkit-font-smoothing:antialiased}
+.bg{position:fixed;inset:0;z-index:-1;overflow:hidden;background:
+  radial-gradient(760px 520px at 82% -6%, #1E2740 0%, transparent 62%),
+  radial-gradient(620px 460px at -8% 96%, #1A2333 0%, transparent 66%), var(--bg)}
+.blob{position:absolute;border-radius:50%;filter:blur(100px)}
+.b1{width:64vw;height:64vw;background:#2E4C86;top:-20vw;right:-16vw;opacity:.30;animation:d1 34s ease-in-out infinite}
+.b2{width:52vw;height:52vw;background:#2B6157;bottom:-18vw;left:-14vw;opacity:.22;animation:d2 42s ease-in-out infinite}
+@keyframes d1{50%{transform:translate3d(-4vw,5vw,0) scale(1.06)}}
+@keyframes d2{50%{transform:translate3d(5vw,-4vw,0) scale(1.08)}}
+
+.app{max-width:460px;margin:0 auto;min-height:100%;padding-bottom:var(--bar-h);position:relative}
+@media(min-width:900px){
+  .app{max-width:420px;min-height:calc(100vh - 44px);margin:22px auto;border:1px solid var(--edge);
+    border-radius:34px;overflow:hidden;box-shadow:0 36px 90px rgba(0,0,0,.6)}
+  .tabbar,.fab{position:absolute!important}
+}
+
+/* ---------- top bar ---------- */
+.topbar{position:sticky;top:0;z-index:20;
+  padding:calc(14px + env(safe-area-inset-top)) 18px 14px;
+  background:linear-gradient(180deg,rgba(19,22,32,.95) 55%,rgba(19,22,32,0));
+  backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px)}
+.topbar .row{display:flex;align-items:center;justify-content:space-between;gap:12px}
+.topbar h1{margin:0;font-size:var(--t-h2);font-weight:600;letter-spacing:-.015em;line-height:1.2}
+.topbar .sub{font-size:var(--t-small);color:var(--mut);margin-top:1px}
+.iconbtn{background:var(--surface-2);border:1px solid var(--edge);color:var(--text);border-radius:999px;
+  padding:8px 15px;font:inherit;font-size:var(--t-small);font-weight:500;cursor:pointer}
+.iconbtn:active{transform:scale(.96)}
+.datebar{display:flex;align-items:center;justify-content:center;gap:4px;margin-top:12px}
+.datebar button{background:var(--surface);border:1px solid var(--edge);color:var(--text);
+  width:32px;height:32px;border-radius:999px;font-size:16px;cursor:pointer;display:grid;place-items:center}
+.datebar button:disabled{opacity:.28}
+.datebar .lbl{min-width:150px;text-align:center;font-size:var(--t-small);font-weight:500;color:var(--mut)}
+
+main{padding:2px 16px 24px}
+.screen[hidden]{display:none}
+
+.block{background:var(--surface);border:1px solid var(--edge);border-radius:var(--r);padding:18px;
+  backdrop-filter:blur(18px) saturate(130%);-webkit-backdrop-filter:blur(18px) saturate(130%)}
+.block + .block,.block + .quick,.quick + .block{margin-top:12px}
+.bhead{display:flex;align-items:baseline;justify-content:space-between;gap:10px;margin-bottom:14px}
+.bhead h2{margin:0;font-size:var(--t-lead);font-weight:600;letter-spacing:-.01em}
+.bhead a,.bhead span{color:var(--mut);font-size:var(--t-small);text-decoration:none;cursor:pointer}
+.bhead a{color:var(--state)}
+
+/* ---------- hero ---------- */
+.hero{text-align:center;padding:22px 18px 20px}
+.ringwrap{position:relative;width:186px;height:186px;margin:0 auto}
+.ringwrap svg{transform:rotate(-90deg) scaleX(-1)}
+.ring-bg{stroke:rgba(255,255,255,.07)}
+.ring-fg{stroke:var(--state);stroke-linecap:round;
+  transition:stroke-dashoffset .8s cubic-bezier(.22,1,.36,1),stroke .5s ease}
+.ringtext{position:absolute;inset:0;display:grid;place-content:center}
+.ringtext b{font-size:var(--t-hero);font-weight:600;line-height:1;letter-spacing:-.035em;
+  font-variant-numeric:tabular-nums;color:var(--state);transition:color .5s ease}
+.ringtext span{font-size:var(--t-small);color:var(--mut);margin-top:6px}
+.prog{display:none}
+.eq{display:flex;margin-top:20px;gap:1px;background:var(--edge);border-radius:var(--r-sm);overflow:hidden}
+.eq div{flex:1;background:rgba(255,255,255,.03);padding:11px 6px}
+.eq span{display:block;font-size:var(--t-micro);color:var(--mut)}
+.eq b{font-size:var(--t-num);font-weight:500;letter-spacing:-.02em;font-variant-numeric:tabular-nums;line-height:1.3}
+
+/* ---------- quick actions ---------- */
+.quick{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.qtile{background:var(--surface);border:1px solid var(--edge);border-radius:var(--r-sm);padding:15px 10px;
+  display:flex;align-items:center;gap:11px;cursor:pointer;font:inherit;font-size:var(--t-small);
+  font-weight:500;color:var(--text);text-align:start;
+  backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px)}
+.qtile:active{background:var(--surface-2)}
+.qi{width:34px;height:34px;border-radius:11px;display:grid;place-items:center;flex:0 0 auto;
+  background:rgba(255,255,255,.07)}
+.qi svg{width:18px;height:18px;fill:none;stroke-width:1.9;stroke-linecap:round;stroke-linejoin:round}
+.qi.b svg{stroke:var(--carb)} .qi.r svg{stroke:var(--fat)}
+.qi.t svg{stroke:var(--state)} .qi.a svg{stroke:var(--prot)}
+
+/* ---------- macros ---------- */
+.macrow{display:flex;align-items:center;gap:18px}
+.donut{width:96px;height:96px;flex:0 0 auto;position:relative}
+.donut svg{transform:rotate(-90deg) scaleX(-1)}
+.donut .mid{position:absolute;inset:0;display:grid;place-content:center;text-align:center}
+.donut .mid b{font-size:var(--t-h3);font-weight:500;line-height:1;font-variant-numeric:tabular-nums}
+.donut .mid span{font-size:var(--t-micro);color:var(--mut);margin-top:2px}
+.mlist{flex:1;display:grid;gap:13px}
+.mitem .top{display:flex;align-items:center;gap:8px;font-size:var(--t-small);color:var(--mut);margin-bottom:6px}
+.dot{width:8px;height:8px;border-radius:3px;flex:0 0 auto}
+.mitem .top b{margin-inline-start:auto;color:var(--text);font-size:var(--t-small);font-weight:500;font-variant-numeric:tabular-nums}
+.track{height:6px;border-radius:99px;background:rgba(255,255,255,.07);overflow:hidden}
+.track i{display:block;height:100%;border-radius:99px;transition:width .5s cubic-bezier(.22,1,.36,1)}
+
+/* ---------- water ---------- */
+.water{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.cup{width:27px;height:34px;border:1.5px solid var(--edge-strong);border-radius:3px 3px 9px 9px;
+  background:transparent;cursor:pointer;position:relative;overflow:hidden;padding:0}
+.cup.on{border-color:var(--carb)}
+.cup.on::after{content:"";position:absolute;inset:auto 0 0 0;height:68%;background:var(--carb);opacity:.55}
+.waterlbl{margin-inline-start:auto;font-size:var(--t-small);color:var(--mut);font-variant-numeric:tabular-nums}
+
+/* ---------- diary ---------- */
+.meal{background:var(--surface);border:1px solid var(--edge);border-radius:var(--r);padding:16px 18px;
+  backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px)}
+.meal + .meal{margin-top:10px}
+.mhead{display:flex;align-items:baseline;justify-content:space-between;gap:10px}
+.mhead h3{margin:0;font-size:var(--t-lead);font-weight:600;letter-spacing:-.01em}
+.mhead .k{color:var(--mut);font-size:var(--t-small);font-variant-numeric:tabular-nums}
+.items{list-style:none;margin:12px 0 0;padding:0}
+.items li{display:flex;align-items:center;gap:12px;padding:9px 0}
+.items li + li{border-top:1px solid var(--edge)}
+.items .nm{flex:1;min-width:0}
+.items .nm b{display:block;font-weight:400;font-size:var(--t-body);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.items .nm span{color:var(--mut2);font-size:var(--t-micro)}
+.items .num{font-weight:500;font-size:var(--t-body);font-variant-numeric:tabular-nums}
+.del{background:none;border:0;color:var(--mut2);font-size:15px;cursor:pointer;padding:6px;border-radius:8px}
+.del:active{color:var(--bad)}
+.addlink{margin-top:12px;background:var(--surface-2);border:1px solid var(--edge);color:var(--text);
+  border-radius:999px;font:inherit;font-size:var(--t-small);font-weight:500;cursor:pointer;padding:8px 16px}
+.addlink:active{background:rgba(255,255,255,.12)}
+.totals{display:flex;gap:1px;background:var(--edge);border:1px solid var(--edge);border-radius:var(--r);
+  overflow:hidden;margin-top:12px}
+.totals div{flex:1;background:rgba(255,255,255,.04);padding:14px 4px;text-align:center}
+.totals b{display:block;font-size:var(--t-h3);font-weight:500;letter-spacing:-.02em;font-variant-numeric:tabular-nums}
+.totals span{font-size:var(--t-micro);color:var(--mut)}
+.totals .rem b{color:var(--state)}
+
+/* ---------- progress ---------- */
+.chart{display:flex;align-items:flex-end;gap:6px;height:152px;position:relative;margin-top:4px}
+.col{flex:1;display:flex;flex-direction:column;align-items:center;gap:7px;height:100%;background:none;border:0;padding:0;cursor:pointer}
+.stack{flex:1;width:100%;display:flex;align-items:flex-end}
+.fill{width:100%;border-radius:7px 7px 3px 3px;background:linear-gradient(180deg,var(--carb),#4C6FC4);
+  min-height:3px;transition:height .6s cubic-bezier(.22,1,.36,1)}
+.fill.over{background:linear-gradient(180deg,#FF9494,var(--bad))}
+.col .d{font-size:var(--t-micro);color:var(--mut)}
+.col.today .d{color:var(--text);font-weight:500}
+.goalline{position:absolute;inset-inline:0;border-top:1px dashed var(--edge-strong)}
+.goalline span{position:absolute;inset-inline-end:0;top:-17px;font-size:11.5px;color:var(--mut);
+  background:var(--bg);padding:0 5px}
+.kpi{display:flex;gap:1px;background:var(--edge);border-radius:var(--r-sm);overflow:hidden;margin-top:18px}
+.kpi div{flex:1;background:rgba(255,255,255,.03);padding:12px 6px;text-align:center}
+.kpi b{display:block;font-size:var(--t-num);font-weight:500;letter-spacing:-.02em;line-height:1.2;font-variant-numeric:tabular-nums}
+.kpi span{font-size:var(--t-micro);color:var(--mut)}
+.spark svg{width:100%;height:88px;display:block;margin-top:4px}
+.sparkfoot{display:flex;justify-content:space-between;color:var(--mut);font-size:var(--t-micro);margin-top:10px}
+
+/* ---------- forms ---------- */
+.form{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+.form .wide{grid-column:1 / -1}
+.field label{display:block;font-size:var(--t-micro);color:var(--mut);margin-bottom:6px}
+input,select{width:100%;background:rgba(255,255,255,.05);border:1px solid var(--edge);color:var(--text);
+  border-radius:var(--r-sm);padding:12px 13px;font:inherit;font-size:16px;outline:none;
+  transition:border-color .15s,background .15s}
+input::placeholder{color:var(--mut2)}
+input:focus,select:focus{border-color:var(--state);background:rgba(255,255,255,.08)}
+select{appearance:none;background-image:linear-gradient(45deg,transparent 50%,var(--mut) 50%),linear-gradient(135deg,var(--mut) 50%,transparent 50%);
+  background-position:left 15px top 22px,left 10px top 22px;background-size:5px 5px;background-repeat:no-repeat}
+option{background:#1B1F2B;color:var(--text)}
+.seg{display:flex;gap:1px;background:var(--edge);border-radius:var(--r-sm);overflow:hidden}
+.seg button{flex:1;background:rgba(255,255,255,.04);border:0;color:var(--mut);padding:12px 2px;
+  cursor:pointer;font:inherit;font-size:var(--t-body)}
+.seg button[aria-pressed="true"]{background:rgba(92,210,164,.16);color:var(--state);font-weight:500}
+.stats{display:grid;grid-template-columns:1fr 1fr;gap:1px;background:var(--edge);
+  border-radius:var(--r-sm);overflow:hidden;margin-top:18px}
+.stat{background:rgba(255,255,255,.03);padding:13px 15px}
+.stat .k{font-size:var(--t-micro);color:var(--mut)}
+.stat .v{font-size:var(--t-num);font-weight:500;letter-spacing:-.02em;line-height:1.3;font-variant-numeric:tabular-nums}
+.stat .v small{font-size:var(--t-micro);font-weight:400;color:var(--mut);margin-inline-start:4px}
+.note{margin:16px 0 0;padding:13px 15px;font-size:var(--t-small);color:#F0C98A;
+  background:rgba(229,179,106,.1);border:1px solid rgba(229,179,106,.22);border-radius:var(--r-sm)}
+.note[hidden]{display:none}
+.btn{width:100%;background:var(--state);border:0;color:#0E1620;font:inherit;font-size:var(--t-body);
+  font-weight:600;padding:14px;border-radius:var(--r-sm);cursor:pointer}
+.btn:active{filter:brightness(1.08)}
+.btn.sec{background:var(--surface-2);color:var(--text);border:1px solid var(--edge)}
+.btnrow{margin-top:16px}
+.legalnote{color:var(--mut2);font-size:var(--t-micro);text-align:center;margin:18px 10px 0;line-height:1.7}
+
+/* ---------- camera ---------- */
+.cam{position:fixed;inset:0;z-index:70;background:#000}
+.cam[hidden]{display:none}
+.cam video{width:100%;height:100%;object-fit:cover}
+.camui{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:space-between;
+  padding:calc(18px + env(safe-area-inset-top)) 18px calc(26px + env(safe-area-inset-bottom))}
+.camtop{width:100%;display:flex;align-items:center;justify-content:space-between;color:#fff;font-size:var(--t-small)}
+.camtop button{background:rgba(255,255,255,.16);border:0;color:#fff;font:inherit;font-size:var(--t-small);
+  font-weight:500;padding:9px 16px;border-radius:999px;cursor:pointer}
+.frame{width:76%;max-width:300px;aspect-ratio:1.6;border:2px solid rgba(255,255,255,.9);border-radius:16px;
+  box-shadow:0 0 0 2000px rgba(0,0,0,.5)}
+.camhint{color:#fff;font-size:var(--t-small);text-align:center;background:rgba(0,0,0,.55);
+  padding:10px 18px;border-radius:999px}
+
+/* ---------- meal scan ---------- */
+.scanbox{border:1px dashed var(--edge-strong);border-radius:var(--r-sm);padding:24px 16px;
+  text-align:center;color:var(--mut);font-size:var(--t-small);line-height:1.7}
+.mealitem{display:flex;align-items:center;gap:12px;padding:11px 0;border-bottom:1px solid var(--edge)}
+.mealitem input[type=checkbox]{width:19px;height:19px;flex:0 0 auto;accent-color:var(--state)}
+.mealitem .nm{flex:1}
+.mealitem .nm b{display:block;font-size:var(--t-body);font-weight:400}
+.mealitem .nm span{color:var(--mut2);font-size:var(--t-micro)}
+.mealitem .kc{font-size:var(--t-body);font-weight:500;font-variant-numeric:tabular-nums}
+.spin{display:inline-block;width:15px;height:15px;border:2px solid var(--edge);border-top-color:var(--state);
+  border-radius:50%;animation:sp .8s linear infinite;vertical-align:-3px;margin-inline-end:8px}
+@keyframes sp{to{transform:rotate(360deg)}}
+
+/* ---------- bottom nav ---------- */
+.tabbar{position:fixed;bottom:0;inset-inline:0;max-width:460px;margin:0 auto;z-index:30;height:var(--bar-h);
+  padding-bottom:env(safe-area-inset-bottom);display:grid;grid-template-columns:1fr 1fr 68px 1fr 1fr;
+  align-items:center;background:rgba(19,22,32,.86);border-top:1px solid var(--edge);
+  backdrop-filter:blur(22px) saturate(150%);-webkit-backdrop-filter:blur(22px) saturate(150%)}
+.tab{background:none;border:0;color:var(--mut2);font:inherit;font-size:11.5px;cursor:pointer;
+  display:flex;flex-direction:column;align-items:center;gap:4px;height:100%;justify-content:center;padding:0}
+.tab svg{width:21px;height:21px;stroke:currentColor;fill:none;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+.tab[aria-current="page"]{color:var(--text)}
+.tab[aria-current="page"] svg{stroke:var(--state);stroke-width:2.1}
+.fab{position:fixed;bottom:calc(var(--bar-h) - 22px);left:50%;transform:translateX(-50%);z-index:31;
+  width:56px;height:56px;border-radius:50%;border:0;background:var(--state);color:#0E1620;
+  font-size:28px;font-weight:300;cursor:pointer;display:grid;place-items:center;
+  box-shadow:0 6px 20px rgba(92,210,164,.3),0 0 0 5px var(--bg)}
+.fab:active{transform:translateX(-50%) scale(.93)}
+
+/* ---------- sheet ---------- */
+.scrim{position:fixed;inset:0;z-index:50;background:rgba(6,9,16,.66);backdrop-filter:blur(5px);
+  display:flex;align-items:flex-end;justify-content:center}
+.scrim[hidden]{display:none}
+.sheet{width:min(460px,100%);max-height:92vh;display:flex;flex-direction:column;
+  background:rgba(26,30,42,.96);border:1px solid var(--edge);border-bottom:0;border-radius:26px 26px 0 0;
+  padding-bottom:env(safe-area-inset-bottom);animation:up .28s cubic-bezier(.22,1,.36,1);
+  backdrop-filter:blur(26px) saturate(140%);-webkit-backdrop-filter:blur(26px) saturate(140%)}
+@keyframes up{from{transform:translateY(100%)}}
+.sheet .sh{display:flex;align-items:center;justify-content:space-between;padding:18px 18px 14px}
+.sheet .sh h3{margin:0;font-size:var(--t-lead);font-weight:600}
+.sheet .sh button{background:none;border:0;color:var(--mut);font:inherit;font-size:var(--t-small);
+  font-weight:500;cursor:pointer}
+.tabs{display:flex;gap:6px;padding:0 18px 12px}
+.tabs button{flex:1;background:rgba(255,255,255,.04);border:1px solid transparent;color:var(--mut);
+  font:inherit;font-size:var(--t-small);padding:9px 2px;border-radius:999px;cursor:pointer}
+.tabs button[aria-selected="true"]{background:rgba(92,210,164,.15);color:var(--state);
+  border-color:rgba(92,210,164,.3);font-weight:500}
+.sbody{padding:0 18px 20px;overflow:auto;-webkit-overflow-scrolling:touch}
+.results{list-style:none;margin:12px 0 0;padding:0}
+.results li{display:flex;align-items:center;gap:12px;padding:12px 10px;border-radius:var(--r-sm);cursor:pointer}
+.results li + li{margin-top:2px}
+.results li:active{background:var(--surface-2)}
+.results .nm{flex:1}
+.results .nm b{display:block;font-weight:400;font-size:var(--t-body)}
+.results .nm span{color:var(--mut2);font-size:var(--t-micro)}
+.results .kc{color:var(--mut);font-size:var(--t-micro);white-space:nowrap;font-variant-numeric:tabular-nums}
+.picked{background:rgba(255,255,255,.05);border:1px solid var(--edge);border-radius:var(--r-sm);
+  padding:16px;margin-top:14px}
+.picked h4{margin:0 0 14px;font-size:var(--t-lead);font-weight:600}
+.qty{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.preview{display:flex;gap:18px;flex-wrap:wrap;margin-top:16px;font-size:var(--t-micro);color:var(--mut)}
+.preview b{display:block;color:var(--text);font-size:var(--t-h3);font-weight:500;
+  letter-spacing:-.02em;font-variant-numeric:tabular-nums}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:12px}
+.toast{position:fixed;bottom:calc(var(--bar-h) + 16px);left:50%;transform:translate(-50%,12px);
+  background:rgba(30,35,48,.97);border:1px solid var(--edge);color:var(--text);border-radius:var(--r-sm);
+  padding:12px 18px;font-size:var(--t-small);opacity:0;pointer-events:none;
+  transition:opacity .22s,transform .22s;z-index:60;box-shadow:0 14px 40px rgba(0,0,0,.5)}
+.toast.show{opacity:1;transform:translate(-50%,0)}
+:focus-visible{outline:2px solid var(--state);outline-offset:2px}
+@media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+@media(max-width:360px){:root{--t-hero:40px;--t-num:24px}.ringwrap{width:164px;height:164px}}
+</style>
+</head>
+<body>
+<div class="bg" aria-hidden="true"><div class="blob b1"></div><div class="blob b2"></div></div>
+<div class="app">
+  <div class="topbar">
+    <div class="row">
+      <div><h1 id="barTitle">מאזן</h1><div class="sub" id="barSub">סקירת היום</div></div>
+      <button class="iconbtn" id="installBtn" hidden>התקנה</button>
+    </div>
+    <div class="datebar" id="dateBar">
+      <button id="prevDay" aria-label="יום קודם">›</button>
+      <div class="lbl" id="dateLabel">היום</div>
+      <button id="nextDay" aria-label="יום הבא">‹</button>
+    </div>
+  </div>
+
+  <main>
+    <!-- ============ HOME ============ -->
+    <section class="screen" id="scr-home">
+      <section class="block hero">
+        <div class="ringwrap">
+          <svg viewBox="0 0 186 186" width="186" height="186" aria-hidden="true">
+            <circle class="ring-bg" cx="93" cy="93" r="80" fill="none" stroke-width="12"/>
+            <circle class="ring-fg" id="ringFg" cx="93" cy="93" r="80" fill="none" stroke-width="12"
+                    stroke-dasharray="502.7" stroke-dashoffset="502.7"/>
+          </svg>
+          <div class="ringtext"><b id="remain">0</b><span id="remainCap">קלוריות נותרו</span></div>
+        </div>
+        <div class="eq">
+          <div><span>יעד</span><b id="eqGoal">0</b></div>
+          <div><span>אכלת</span><b id="eqFood">0</b></div>
+          <div><span>שרפת</span><b id="eqEx">0</b></div>
+        </div>
+        <i id="progFill" class="prog"></i>
+      </section>
+
+      <div class="quick">
+        <button class="qtile" data-act="search"><span class="qi b"><svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg></span>חיפוש מאכל</button>
+        <button class="qtile" data-act="barcode"><span class="qi r"><svg viewBox="0 0 24 24"><path d="M4 8V5.5A1.5 1.5 0 0 1 5.5 4H8M16 4h2.5A1.5 1.5 0 0 1 20 5.5V8M20 16v2.5a1.5 1.5 0 0 1-1.5 1.5H16M8 20H5.5A1.5 1.5 0 0 1 4 18.5V16"/><path d="M8 9v6M11 9v6M14 9v6M17 9v6"/></svg></span>סריקת ברקוד</button>
+        <button class="qtile" data-act="meal"><span class="qi t"><svg viewBox="0 0 24 24"><path d="M4 8V6a2 2 0 0 1 2-2h2M16 4h2a2 2 0 0 1 2 2v2M20 16v2a2 2 0 0 1-2 2h-2M8 20H6a2 2 0 0 1-2-2v-2"/><circle cx="12" cy="12" r="3.2"/></svg></span>צילום מנה</button>
+        <button class="qtile" data-act="ex"><span class="qi a"><svg viewBox="0 0 24 24"><path d="M12 3s4.5 4 4.5 8a4.5 4.5 0 0 1-9 0c0-1.6.7-3 1.5-4 .2 1.2.9 2 1.8 2 1.2 0 1.5-1.4 1.2-6Z"/></svg></span>פעילות</button>
+      </div>
+
+      <div class="block">
+        <div class="bhead"><h2>מאקרו־נוטריאנטים</h2></div>
+        <div class="macrow">
+          <div class="donut">
+            <svg viewBox="0 0 104 104" width="104" height="104" aria-hidden="true">
+              <circle cx="52" cy="52" r="44" fill="none" stroke="#EAECF0" stroke-width="11"/>
+              <circle id="dC" cx="52" cy="52" r="44" fill="none" stroke="var(--carb)" stroke-width="11" stroke-dasharray="0 999"/>
+              <circle id="dP" cx="52" cy="52" r="44" fill="none" stroke="var(--prot)" stroke-width="11" stroke-dasharray="0 999"/>
+              <circle id="dF" cx="52" cy="52" r="44" fill="none" stroke="var(--fat)" stroke-width="11" stroke-dasharray="0 999"/>
+            </svg>
+            <div class="mid"><b id="dKcal">0</b><span>קק״ל</span></div>
+          </div>
+          <div class="mlist">
+            <div class="mitem"><div class="top"><i class="dot" style="background:var(--carb)"></i>פחמימות<b id="cTxt">0 / 0 ג׳</b></div><div class="track"><i id="cBar" style="background:var(--carb)"></i></div></div>
+            <div class="mitem"><div class="top"><i class="dot" style="background:var(--prot)"></i>חלבון<b id="pTxt">0 / 0 ג׳</b></div><div class="track"><i id="pBar" style="background:var(--prot)"></i></div></div>
+            <div class="mitem"><div class="top"><i class="dot" style="background:var(--fat)"></i>שומן<b id="fTxt">0 / 0 ג׳</b></div><div class="track"><i id="fBar" style="background:var(--fat)"></i></div></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="block">
+        <div class="bhead"><h2>מים</h2></div>
+        <div class="water" id="water"></div>
+      </div>
+
+      <div class="block">
+        <div class="bhead"><h2>הוספה מהירה</h2></div>
+        <div class="water" id="recents" style="gap:8px"></div>
+      </div>
+    </section>
+
+    <!-- ============ DIARY ============ -->
+    <section class="screen" id="scr-diary" hidden>
+      <div id="meals"></div>
+      <div>
+        <div class="totals">
+          <div><b id="tFood">0</b><span>נאכלו</span></div>
+          <div><b id="tGoal">0</b><span>יעד</span></div>
+          <div><b id="tEx">0</b><span>פעילות</span></div>
+          <div class="rem"><b id="tRem">0</b><span>נותרו</span></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ PROGRESS ============ -->
+    <section class="screen" id="scr-prog" hidden>
+      <div class="block">
+        <div class="bhead"><h2>7 הימים האחרונים</h2><span style="font-size:12px;color:var(--mut)">הקש על יום</span></div>
+        <div class="chart" id="chart"></div>
+        <div class="kpi">
+          <div><b id="kAvg">0</b><span>ממוצע יומי</span></div>
+          <div><b id="kIn">0</b><span>ימים ביעד</span></div>
+          <div><b id="kLogged">0</b><span>ימים שנרשמו</span></div>
+        </div>
+      </div>
+      <div class="block">
+        <div class="bhead"><h2>משקל</h2><span id="wDelta" style="font-size:12px;color:var(--mut)"></span></div>
+        <div class="spark">
+          <svg id="spark" viewBox="0 0 300 88" preserveAspectRatio="none" aria-hidden="true"></svg>
+          <div class="sparkfoot"><span id="wFirst"></span><span id="wLast"></span></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ PROFILE ============ -->
+    <section class="screen" id="scr-me" hidden>
+      <div class="block">
+        <div class="bhead"><h2>חשבון וסנכרון</h2><span id="acctSync" style="font-size:12px;color:var(--mut)"></span></div>
+
+        <div class="form" id="acctSetup">
+          <p style="grid-column:1/-1;margin:0;font-size:13px;color:var(--mut);line-height:1.6">
+            כדי לסנכרן בין מכשירים צריך פרויקט Supabase. פתח פרויקט חינמי,
+            והעתק מ‑Project Settings → API את שתי השורות האלה.
+            ה‑anon key מיועד לחשיפה פומבית — ההגנה על הנתונים היא מדיניות ה‑RLS.
+          </p>
+          <div class="field wide"><label for="sbUrl">Project URL</label>
+            <input id="sbUrl" type="url" placeholder="https://xxxxx.supabase.co" autocomplete="off"></div>
+          <div class="field wide"><label for="sbKey">Anon public key</label>
+            <input id="sbKey" placeholder="eyJhbGciOi..." autocomplete="off"></div>
+          <div class="field wide"><button class="btn" id="sbSave">שמירת החיבור</button></div>
+        </div>
+
+        <div class="form" id="acctOut" hidden>
+          <div class="field wide"><label for="acctMail">אימייל</label>
+            <input id="acctMail" type="email" autocomplete="email" placeholder="you@example.com"></div>
+          <div class="field wide"><label for="acctPass">סיסמה</label>
+            <input id="acctPass" type="password" autocomplete="current-password" placeholder="לפחות 6 תווים"></div>
+          <div class="field"><button class="btn" id="btnSignIn">כניסה</button></div>
+          <div class="field"><button class="btn sec" id="btnSignUp">הרשמה</button></div>
+          <p style="grid-column:1/-1;margin:0;font-size:12px;color:var(--mut2)">
+            בלי חשבון האפליקציה עובדת רגיל, והנתונים נשמרים על המכשיר הזה בלבד.
+          </p>
+        </div>
+
+        <div class="form" id="acctIn" hidden>
+          <div class="field wide" style="display:flex;align-items:center;gap:10px">
+            <span style="width:36px;height:36px;border-radius:50%;background:var(--blue-soft);color:var(--blue);
+              display:grid;place-items:center;font-weight:800">✓</span>
+            <span><b id="acctEmail" style="font-size:14.5px"></b>
+            <span style="display:block;font-size:12px;color:var(--mut)">הנתונים מסונכרנים בין המכשירים שלך</span></span>
+          </div>
+          <div class="field"><button class="btn sec" id="btnSyncNow">סנכרון עכשיו</button></div>
+          <div class="field"><button class="btn sec" id="btnSignOut">יציאה</button></div>
+        </div>
+      </div>
+
+      <div class="block">
+        <div class="bhead"><h2>פרטי המתאמן</h2></div>
+        <div class="form">
+          <div class="field wide"><label>מין</label>
+            <div class="seg" id="sexSeg">
+              <button type="button" data-v="male" aria-pressed="true">גבר</button>
+              <button type="button" data-v="female" aria-pressed="false">אישה</button>
+            </div>
+          </div>
+          <div class="field"><label for="age">גיל</label><input id="age" type="number" min="14" max="99" value="28" inputmode="numeric"></div>
+          <div class="field"><label for="height">גובה (ס״מ)</label><input id="height" type="number" min="120" max="220" value="178" inputmode="numeric"></div>
+          <div class="field wide"><label for="weight">משקל נוכחי (ק״ג)</label><input id="weight" type="number" min="35" max="250" step="0.1" value="80" inputmode="decimal"></div>
+          <div class="field wide"><label for="activity">רמת פעילות</label>
+            <select id="activity">
+              <option value="1.2">יושבני — כמעט בלי אימונים</option>
+              <option value="1.375">קלה — 1–3 אימונים בשבוע</option>
+              <option value="1.55" selected>בינונית — 3–5 אימונים בשבוע</option>
+              <option value="1.725">גבוהה — 6–7 אימונים בשבוע</option>
+              <option value="1.9">מאוד גבוהה — עבודה פיזית או אימון כפול</option>
+            </select>
+          </div>
+          <div class="field wide"><label for="goal">מטרה</label>
+            <select id="goal">
+              <option value="-1">ירידה מהירה — 1 ק״ג בשבוע</option>
+              <option value="-0.5" selected>ירידה מתונה — 0.5 ק״ג בשבוע</option>
+              <option value="-0.25">ירידה איטית — 0.25 ק״ג בשבוע</option>
+              <option value="0">שמירה על המשקל</option>
+              <option value="0.25">עלייה מבוקרת — 0.25 ק״ג בשבוע</option>
+              <option value="0.5">עלייה במסה — 0.5 ק״ג בשבוע</option>
+            </select>
+          </div>
+          <div class="field wide"><label for="apiUrl">שרת זיהוי מנות (אופציונלי)</label>
+            <input id="apiUrl" type="url" placeholder="https://xxx.workers.dev" autocomplete="off" inputmode="url"></div>
+        </div>
+        <div class="stats">
+          <div class="stat"><div class="k">חילוף חומרים במנוחה</div><div class="v" id="sBmr">—</div></div>
+          <div class="stat"><div class="k">שריפה יומית כוללת</div><div class="v" id="sTdee">—</div></div>
+          <div class="stat"><div class="k">היעד היומי</div><div class="v" id="sTarget">—</div></div>
+          <div class="stat"><div class="k">BMI</div><div class="v" id="sBmi">—</div></div>
+          <div class="stat"><div class="k">מים מומלצים</div><div class="v" id="sWater">—</div></div>
+          <div class="stat"><div class="k">יעד חלבון</div><div class="v" id="sProt">—</div></div>
+        </div>
+        <p class="note" id="floorNote" hidden></p>
+        <div class="btnrow"><button class="btn sec" id="logWeight">רישום המשקל להיום</button></div>
+      </div>
+      <p class="legalnote">המספרים הם הערכה סטטיסטית ואינם ייעוץ תזונתי.<br>כל הנתונים נשמרים במכשיר שלך בלבד.</p>
+    </section>
+  </main>
+
+  <nav class="tabbar">
+    <button class="tab" data-scr="home" aria-current="page">
+      <svg viewBox="0 0 24 24"><path d="M3 10.5 12 3l9 7.5"/><path d="M5.5 9.5V20h13V9.5"/></svg>בית</button>
+    <button class="tab" data-scr="diary">
+      <svg viewBox="0 0 24 24"><rect x="4" y="3.5" width="16" height="17" rx="2.5"/><path d="M8 8h8M8 12h8M8 16h5"/></svg>יומן</button>
+    <span></span>
+    <button class="tab" data-scr="prog">
+      <svg viewBox="0 0 24 24"><path d="M4 19V9M10 19V5M16 19v-6M21 19H3"/></svg>התקדמות</button>
+    <button class="tab" data-scr="me">
+      <svg viewBox="0 0 24 24"><circle cx="12" cy="8" r="3.4"/><path d="M4.8 20a7.2 7.2 0 0 1 14.4 0"/></svg>פרופיל</button>
+  </nav>
+  <button class="fab" id="fab" aria-label="הוספה">＋</button>
+</div>
+
+<div class="scrim" id="scrim" hidden>
+  <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="mTitle">
+    <div class="sh"><h3 id="mTitle">הוספה ליומן</h3><button id="closeSheet">סגירה</button></div>
+    <div class="tabs" role="tablist">
+      <button role="tab" id="tabSearch" aria-selected="true">מאכלים</button>
+      <button role="tab" id="tabNew" aria-selected="false">מאכל חדש</button>
+      <button role="tab" id="tabEx" aria-selected="false">פעילות</button>
+      <button role="tab" id="tabMeal" aria-selected="false">צילום</button>
+    </div>
+    <div class="sbody">
+      <div id="paneSearch">
+        <div class="field"><label for="mealSel">ארוחה</label><select id="mealSel"></select></div>
+        <input id="q" type="search" placeholder="חפש — פיתה, חזה עוף, קוטג׳…" autocomplete="off" style="margin-top:10px">
+        <ul class="results" id="results"></ul>
+        <div class="picked" id="picked" hidden>
+          <h4 id="pickedName"></h4>
+          <div class="qty">
+            <div class="field"><label for="amount">כמות</label><input id="amount" type="number" min="0" step="1" value="100" inputmode="decimal"></div>
+            <div class="field"><label for="unit">יחידה</label><select id="unit"></select></div>
+          </div>
+          <div class="preview">
+            <div>קלוריות<b id="pvKcal">0</b></div><div>פחמימות<b id="pvC">0</b></div>
+            <div>חלבון<b id="pvP">0</b></div><div>שומן<b id="pvF">0</b></div>
+          </div>
+          <button class="btn" id="addPicked" style="margin-top:12px">הוספה ליומן</button>
+        </div>
+      </div>
+
+      <div id="paneNew" hidden>
+        <div class="field"><label for="nName">שם המאכל</label><input id="nName" placeholder="למשל: הסלט של אמא"></div>
+        <div class="grid2">
+          <div class="field"><label for="nKcal">קלוריות / 100 ג׳</label><input id="nKcal" type="number" min="0" inputmode="decimal"></div>
+          <div class="field"><label for="nC">פחמימות / 100 ג׳</label><input id="nC" type="number" min="0" step="0.1" inputmode="decimal"></div>
+          <div class="field"><label for="nP">חלבון / 100 ג׳</label><input id="nP" type="number" min="0" step="0.1" inputmode="decimal"></div>
+          <div class="field"><label for="nF">שומן / 100 ג׳</label><input id="nF" type="number" min="0" step="0.1" inputmode="decimal"></div>
+        </div>
+        <button class="btn" id="saveNew" style="margin-top:12px">שמירה למאגר</button>
+      </div>
+
+      <div id="paneEx" hidden>
+        <div class="field"><label for="exName">סוג הפעילות</label><input id="exName" placeholder="ריצה, חדר כושר, הליכה…"></div>
+        <div class="grid2">
+          <div class="field"><label for="exMin">דקות</label><input id="exMin" type="number" min="0" inputmode="numeric" placeholder="45"></div>
+          <div class="field"><label for="exKcal">קלוריות שנשרפו</label><input id="exKcal" type="number" min="0" inputmode="numeric" placeholder="350"></div>
+        </div>
+        <button class="btn" id="addEx" style="margin-top:12px">הוספה ליומן</button>
+      </div>
+
+      <div id="paneMeal" hidden>
+        <div class="field"><label for="mealSel2">ארוחה</label><select id="mealSel2"></select></div>
+        <div class="scanbox" id="scanBox" style="margin-top:12px">
+          צלם את הצלחת או בחר תמונה מהגלריה,<br>ואזהה את המרכיבים ואעריך את הערכים.
+        </div>
+        <button class="btn" id="shootMeal" style="margin-top:12px">צילום או בחירת תמונה</button>
+        <div id="mealResult" style="margin-top:14px"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="cam" id="cam" hidden>
+  <video id="camVideo" playsinline muted autoplay></video>
+  <div class="camui">
+    <div class="camtop"><button id="camClose">סגירה</button><span id="camTitle" style="font-weight:600">סריקת ברקוד</span><span style="width:64px"></span></div>
+    <div class="frame"></div>
+    <div class="camhint" id="camHint">כוון את הברקוד למסגרת</div>
+  </div>
+</div>
+<input type="file" id="mealFile" accept="image/*" capture="environment" hidden>
+
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+<script src="./cloud.js"></script>
+<script src="./app.js"></script>
+</body>
+</html>
