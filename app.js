@@ -240,6 +240,12 @@ function renderSummary(){
   const budget = T.kcal + ex;
   const pct = budget ? Math.min(t.k / budget, 1) : 0;
   const pf = $('progFill'); if (pf) pf.style.width = (pct * 100) + '%';
+  const rf = $('ringFg');
+  if (rf){
+    const R = parseFloat(rf.getAttribute('r')) || 80, C = 2 * Math.PI * R;
+    rf.setAttribute('stroke-dasharray', C.toFixed(1));
+    rf.style.strokeDashoffset = (C * (1 - pct)).toFixed(1);
+  }
   /* מצב היום צובע את כל המסך: יש תקציב / מתקרב / עברת */
   document.documentElement.dataset.state = remain < 0 ? 'over' : (pct >= 0.85 ? 'near' : 'ok');
 
@@ -302,8 +308,8 @@ function renderWater(){
 function renderRecents(){
   $('recents').innerHTML = state.recent.length
     ? state.recent.slice(0,8).map(n =>
-        '<button class="btn sec" style="width:auto;padding:8px 13px;font-size:13.5px;font-weight:600" data-quick="'+esc(n)+'">'+esc(n)+'</button>').join('')
-    : '<span style="color:var(--mut);font-size:13px">מה שתוסיף יופיע כאן ללחיצה אחת</span>';
+        '<button class="btn sec" style="width:auto;padding:8px 15px;font-size:var(--t-small);font-weight:400" data-quick="'+esc(n)+'">'+esc(n)+'</button>').join('')
+    : '<span style="color:var(--mut2);font-size:var(--t-small)">מאכלים שתוסיף יופיעו כאן לחזרה בלחיצה אחת</span>';
 }
 
 function renderDate(){
@@ -341,7 +347,7 @@ async function renderProgress(){
 function renderWeight(){
   const keys = Object.keys(state.weights).sort(), svg = $('spark');
   if (keys.length < 2){
-    svg.innerHTML = '<text x="150" y="48" text-anchor="middle" fill="#9DA29C" font-size="12" font-family="Heebo,sans-serif">רשום משקל בשני ימים כדי לראות מגמה</text>';
+    svg.innerHTML = '<text x="150" y="48" text-anchor="middle" fill="#9BA2B8" font-size="12" font-family="Rubik,sans-serif">רשום משקל בשני ימים כדי לראות מגמה</text>';
     $('wFirst').textContent = ''; $('wLast').textContent = ''; $('wDelta').textContent = '';
     return;
   }
@@ -351,10 +357,10 @@ function renderWeight(){
   const line = pts.map((p,i) => (i ? 'L' : 'M') + round(p[0],1) + ' ' + round(p[1],1)).join(' ');
   svg.innerHTML =
     '<defs><linearGradient id="wg" x1="0" y1="0" x2="0" y2="1">'+
-    '<stop offset="0%" stop-color="#000000" stop-opacity=".14"/><stop offset="100%" stop-color="#000000" stop-opacity="0"/></linearGradient></defs>'+
+    '<stop offset="0%" stop-color="#5CD2A4" stop-opacity=".22"/><stop offset="100%" stop-color="#5CD2A4" stop-opacity="0"/></linearGradient></defs>'+
     '<path d="'+line+' L296 88 L4 88 Z" fill="url(#wg)"/>'+
-    '<path d="'+line+'" fill="none" stroke="#000000" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>'+
-    '<circle cx="'+round(pts[pts.length-1][0],1)+'" cy="'+round(pts[pts.length-1][1],1)+'" r="4" fill="#000000"/>';
+    '<path d="'+line+'" fill="none" stroke="#5CD2A4" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>'+
+    '<circle cx="'+round(pts[pts.length-1][0],1)+'" cy="'+round(pts[pts.length-1][1],1)+'" r="4" fill="#E7E9F2"/>';
   const fmt = k => new Date(k+'T12:00:00').toLocaleDateString('he-IL',{day:'numeric',month:'short'});
   $('wFirst').textContent = vals[0] + ' ק״ג · ' + fmt(keys[0]);
   $('wLast').textContent  = vals[vals.length-1] + ' ק״ג · ' + fmt(keys[keys.length-1]);
