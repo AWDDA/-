@@ -225,6 +225,28 @@ option{background:#1B1F2B;color:var(--text)}
 .btnrow{margin-top:16px}
 .legalnote{color:var(--mut2);font-size:var(--t-micro);text-align:center;margin:18px 10px 0;line-height:1.7}
 
+/* ---------- onboarding ---------- */
+.onb{position:fixed;inset:0;z-index:80;overflow-y:auto;display:flex;align-items:center;justify-content:center;
+  padding:28px 20px calc(28px + env(safe-area-inset-bottom));background:rgba(19,22,32,.94);
+  backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px)}
+.onb[hidden]{display:none}
+.onb .sheetcard{width:min(400px,100%);background:var(--surface);border:1px solid var(--edge);
+  border-radius:26px;padding:26px 22px;backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);
+  box-shadow:0 30px 80px rgba(0,0,0,.5)}
+.onb .mark{width:52px;height:52px;border-radius:17px;display:grid;place-items:center;margin-bottom:18px;
+  background:linear-gradient(150deg,var(--state),var(--carb))}
+.onb .mark svg{width:26px;height:26px;stroke:#0E1620;fill:none;stroke-width:2.4;stroke-linecap:round}
+.onb h2{margin:0;font-size:var(--t-h2);font-weight:600;letter-spacing:-.02em}
+.onb .lead{color:var(--mut);font-size:var(--t-small);margin:6px 0 22px;line-height:1.7}
+.onb .form{margin-bottom:18px}
+.onb .alt{background:none;border:0;color:var(--state);font:inherit;font-size:var(--t-small);
+  cursor:pointer;padding:10px;width:100%}
+.onb .skip{background:none;border:0;color:var(--mut2);font:inherit;font-size:var(--t-micro);
+  cursor:pointer;padding:6px;width:100%;text-decoration:underline}
+.onb .steps{display:flex;gap:6px;margin-bottom:20px}
+.onb .steps i{height:3px;flex:1;border-radius:99px;background:var(--edge)}
+.onb .steps i.on{background:var(--state)}
+
 /* ---------- camera ---------- */
 .cam{position:fixed;inset:0;z-index:70;background:#000}
 .cam[hidden]{display:none}
@@ -424,18 +446,7 @@ option{background:#1B1F2B;color:var(--text)}
       <div class="block">
         <div class="bhead"><h2>חשבון וסנכרון</h2><span id="acctSync" style="font-size:12px;color:var(--mut)"></span></div>
 
-        <div class="form" id="acctSetup">
-          <p style="grid-column:1/-1;margin:0;font-size:13px;color:var(--mut);line-height:1.6">
-            כדי לסנכרן בין מכשירים צריך פרויקט Supabase. פתח פרויקט חינמי,
-            והעתק מ‑Project Settings → API את שתי השורות האלה.
-            ה‑anon key מיועד לחשיפה פומבית — ההגנה על הנתונים היא מדיניות ה‑RLS.
-          </p>
-          <div class="field wide"><label for="sbUrl">Project URL</label>
-            <input id="sbUrl" type="url" placeholder="https://xxxxx.supabase.co" autocomplete="off"></div>
-          <div class="field wide"><label for="sbKey">Anon public key</label>
-            <input id="sbKey" placeholder="eyJhbGciOi..." autocomplete="off"></div>
-          <div class="field wide"><button class="btn" id="sbSave">שמירת החיבור</button></div>
-        </div>
+        <p class="note" id="acctOffline" hidden>החיבור לשרת לא הוגדר, אז האפליקציה עובדת מקומית בלבד.</p>
 
         <div class="form" id="acctOut" hidden>
           <div class="field wide"><label for="acctMail">אימייל</label>
@@ -506,7 +517,7 @@ option{background:#1B1F2B;color:var(--text)}
         <p class="note" id="floorNote" hidden></p>
         <div class="btnrow"><button class="btn sec" id="logWeight">רישום המשקל להיום</button></div>
       </div>
-      <p class="legalnote">המספרים הם הערכה סטטיסטית ואינם ייעוץ תזונתי.<br>כל הנתונים נשמרים במכשיר שלך בלבד.</p>
+      <p class="legalnote">המספרים הם הערכה סטטיסטית ואינם ייעוץ תזונתי.<br>בלי חשבון הנתונים נשמרים במכשיר הזה בלבד.</p>
     </section>
   </main>
 
@@ -580,6 +591,63 @@ option{background:#1B1F2B;color:var(--text)}
         <button class="btn" id="shootMeal" style="margin-top:12px">צילום או בחירת תמונה</button>
         <div id="mealResult" style="margin-top:14px"></div>
       </div>
+    </div>
+  </div>
+</div>
+
+<div class="onb" id="onb" hidden>
+  <div class="sheetcard">
+    <div class="steps"><i class="on" id="stp1"></i><i id="stp2"></i></div>
+
+    <div id="obAccount">
+      <div class="mark" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M4 8v8M20 8v8M7 6v12M17 6v12M7 12h10"/></svg></div>
+      <h2 id="obTitle">ברוך הבא למאזן</h2>
+      <p class="lead" id="obLead">פתח חשבון כדי שהיומן שלך יישמר ויעבור איתך בין הטלפון למחשב.</p>
+      <div class="form">
+        <div class="field wide"><label for="obMail">אימייל</label>
+          <input id="obMail" type="email" autocomplete="email" placeholder="you@example.com"></div>
+        <div class="field wide"><label for="obPass">סיסמה</label>
+          <input id="obPass" type="password" autocomplete="new-password" placeholder="לפחות 6 תווים"></div>
+      </div>
+      <button class="btn" id="obGo">יצירת חשבון</button>
+      <button class="alt" id="obToggle">כבר יש לי חשבון — כניסה</button>
+      <button class="skip" id="obSkip">המשך בלי חשבון (הנתונים יישמרו במכשיר הזה בלבד)</button>
+    </div>
+
+    <div id="obDetails" hidden>
+      <h2>כמה פרטים ונחשב לך יעד</h2>
+      <p class="lead">אפשר לשנות הכל אחר כך במסך הפרופיל.</p>
+      <div class="form">
+        <div class="field wide"><label>מין</label>
+          <div class="seg" id="obSex">
+            <button type="button" data-v="male" aria-pressed="true">גבר</button>
+            <button type="button" data-v="female" aria-pressed="false">אישה</button>
+          </div>
+        </div>
+        <div class="field"><label for="obAge">גיל</label><input id="obAge" type="number" min="14" max="99" value="28" inputmode="numeric"></div>
+        <div class="field"><label for="obHeight">גובה (ס״מ)</label><input id="obHeight" type="number" min="120" max="220" value="178" inputmode="numeric"></div>
+        <div class="field wide"><label for="obWeight">משקל (ק״ג)</label><input id="obWeight" type="number" min="35" max="250" step="0.1" value="80" inputmode="decimal"></div>
+        <div class="field wide"><label for="obActivity">רמת פעילות</label>
+          <select id="obActivity">
+            <option value="1.2">יושבני — כמעט בלי אימונים</option>
+            <option value="1.375">קלה — 1–3 אימונים בשבוע</option>
+            <option value="1.55" selected>בינונית — 3–5 אימונים בשבוע</option>
+            <option value="1.725">גבוהה — 6–7 אימונים בשבוע</option>
+            <option value="1.9">מאוד גבוהה — עבודה פיזית או אימון כפול</option>
+          </select>
+        </div>
+        <div class="field wide"><label for="obGoal">מטרה</label>
+          <select id="obGoal">
+            <option value="-1">ירידה מהירה — 1 ק״ג בשבוע</option>
+            <option value="-0.5" selected>ירידה מתונה — 0.5 ק״ג בשבוע</option>
+            <option value="-0.25">ירידה איטית — 0.25 ק״ג בשבוע</option>
+            <option value="0">שמירה על המשקל</option>
+            <option value="0.25">עלייה מבוקרת — 0.25 ק״ג בשבוע</option>
+            <option value="0.5">עלייה במסה — 0.5 ק״ג בשבוע</option>
+          </select>
+        </div>
+      </div>
+      <button class="btn" id="obFinish">מתחילים</button>
     </div>
   </div>
 </div>

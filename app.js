@@ -857,9 +857,9 @@ async function reloadEverything(){
 /* ---------- ממשק החשבון ---------- */
 function renderAccount(){
   const cfgd = Cloud.ready(), inn = Cloud.signedIn();
-  $('acctSetup').hidden = cfgd;
-  $('acctOut').hidden   = !cfgd || inn;
-  $('acctIn').hidden    = !inn;
+  $('acctOffline').hidden = cfgd;
+  $('acctOut').hidden     = !cfgd || inn;
+  $('acctIn').hidden      = !inn;
   if (inn){
     const u = Cloud.user();
     $('acctEmail').textContent = u ? u.email : '';
@@ -872,13 +872,6 @@ function renderAccount(){
 }
 Cloud.onChange(renderAccount);
 
-$('sbSave').addEventListener('click', () => {
-  const u = $('sbUrl').value.trim(), k = $('sbKey').value.trim();
-  if (!/^https:\/\/.+\.supabase\.co$/.test(u)){ toast('כתובת הפרויקט אמורה להיראות כמו https://xxx.supabase.co'); return; }
-  if (k.length < 40){ toast('ה-anon key נראה קצר מדי'); return; }
-  Cloud.configure(u, k);
-  toast('החיבור נשמר');
-});
 $('btnSignIn').addEventListener('click', () => doAuth('in'));
 $('btnSignUp').addEventListener('click', () => doAuth('up'));
 async function doAuth(mode){
@@ -918,6 +911,119 @@ $('btnSyncNow').addEventListener('click', async () => {
   renderAccount();
   toast('הסנכרון הושלם');
 });
+
+
+/* ============================================================
+   מסך פתיחה — חשבון ואז פרטים אישיים, פעם אחת בלבד
+   ============================================================ */
+const ONB_KEY = 'maazan:onboarded';
+function onbDone(){ try { return !!localStorage.getItem(ONB_KEY); } catch(e){ return false; } }
+function markOnbDone(){ try { localStorage.setItem(ONB_KEY, '1'); } catch(e){} }
+
+let obMode = 'up';   // up = הרשמה, in = כניסה
+
+function obStep(n){
+  $('obAccount').hidden = (n !== 1);
+  $('obDetails').hidden = (n !== 2);
+  $('stp1').classList.toggle('on', n >= 1);
+  $('stp2').classList.toggle('on', n >= 2);
+}
+function obSetMode(m){
+  obMode = m;
+  const up = m === 'up';
+  $('obTitle').textContent  = up ? 'ברוך הבא למאזן' : 'כניסה לחשבון';
+  $('obLead').textContent   = up
+    ? 'פתח חשבון כדי שהיומן שלך יישמר ויעבור איתך בין הטלפון למחשב.'
+    : 'התחבר, והנתונים שלך יימשכו חזרה למכשיר הזה.';
+  $('obGo').textContent     = up ? 'יצירת חשבון' : 'כניסה';
+  $('obToggle').textContent = up ? 'כבר יש לי חשבון — כניסה' : 'אין לי חשבון — הרשמה';
+  $('obPass').setAttribute('autocomplete', up ? 'new-password' : 'current-password');
+}
+$('obToggle').addEventListener('click', () => obSetMode(obMode === 'up' ? 'in' : 'up'));
+
+$('obSex').addEventListener('click', e => {
+  const b = e.target.closest('button'); if (!b) return;
+  [...e.currentTarget.children].forEach(x => x.setAttribute('aria-pressed', String(x === b)));
+});
+
+$('obGo').addEventListener('click', async () => {
+  const email = $('obMail').value.trim(), pass = $('obPass').value;
+  if (!email || !pass){ toast('צריך אימייל וסיסמה'); return; }
+  if (obMode === 'up' && pass.length < 6){ toast('הסיסמה צריכה להיות באורך 6 תווים לפחות'); return; }
+  const btn = $('obGo'), label = btn.textContent;
+  btn.textContent = 'רגע…'; btn.disabled = true;
+  try {
+    if (obMode === 'up'){
+      const r = await Cloud.signUp(email, pass);
+      if (r.needsConfirm){ toast('נשלח אליך מייל אישור — אשר אותו וחזור לכאן'); obSetMode('in'); return; }
+    } else {
+      await Cloud.signIn(email, pass);
+    }
+    $('obPass').value = '';
+    await syncFromCloud();
+    await reloadEverything();
+    renderAccount();
+    /* משתמש חוזר שכבר יש לו פרופיל בענן — אין טעם לשאול אותו שוב */
+    const existing = await Store.get('maazan:profile');
+    if (existing){ obFinishNow(); toast('מחובר · הנתונים שוחזרו'); }
+    else { obPrefill(); obStep(2); }
+  } catch(e){
+    const m = String(e.message || e);
+    toast(m.indexOf('Invalid') === 0 ? 'אימייל או סיסמה שגויים'
+        : m.indexOf('already') > -1 ? 'האימייל הזה כבר רשום — נסה כניסה'
+        : (m || 'הפעולה נכשלה'));
+  } finally {
+    btn.textContent = label; btn.disabled = false;
+  }
+});
+
+$('obSkip').addEventListener('click', () => { obPrefill(); obStep(2); });
+
+function obPrefill(){
+  const P = state.profile;
+  [...$('obSex').children].forEach(b => b.setAttribute('aria-pressed', String(b.dataset.v === P.sex)));
+  $('obAge').value = P.age; $('obHeight').value = P.height; $('obWeight').value = P.weight;
+  $('obActivity').value = P.activity; $('obGoal').value = P.goal;
+}
+
+$('obFinish').addEventListener('click', async () => {
+  const sex = [...$('obSex').children].find(b => b.getAttribute('aria-pressed') === 'true');
+  const age = parseFloat($('obAge').value), h = parseFloat($('obHeight').value), w = parseFloat($('obWeight').value);
+  if (!(age > 0) || !(h > 0) || !(w > 0)){ toast('צריך למלא גיל, גובה ומשקל'); return; }
+  state.profile = {
+    sex: sex ? sex.dataset.v : 'male',
+    age, height: h, weight: w,
+    activity: $('obActivity').value,
+    goal: $('obGoal').value
+  };
+  await saveProfile();
+  state.weights[todayKey()] = round(w, 1);
+  await saveWeights();
+  const P = state.profile;
+  [...$('sexSeg').children].forEach(b => b.setAttribute('aria-pressed', String(b.dataset.v === P.sex)));
+  $('age').value = P.age; $('height').value = P.height; $('weight').value = P.weight;
+  $('activity').value = P.activity; $('goal').value = P.goal;
+  obFinishNow();
+  renderAll();
+});
+
+function obFinishNow(){
+  markOnbDone();
+  $('onb').hidden = true;
+  document.body.style.overflow = '';
+}
+
+function maybeOnboard(){
+  if (onbDone() || Cloud.signedIn()) return;
+  obSetMode('up');
+  obStep(1);
+  if (!Cloud.ready()){
+    /* בלי הגדרת שרת אין למה להירשם — מדלגים ישר לפרטים */
+    $('obAccount').hidden = true;
+    obPrefill(); obStep(2);
+  }
+  $('onb').hidden = false;
+}
 
 /* ---------- toast ---------- */
 let toastT;
@@ -959,6 +1065,7 @@ window.addEventListener('appinstalled', () => { $('installBtn').hidden = true; }
   await loadLog();
   renderAll();
   goto('home');
+  maybeOnboard();
   if ('serviceWorker' in navigator && location.protocol.indexOf('http') === 0) {
     navigator.serviceWorker.register('./sw.js').catch(() => {});
   }

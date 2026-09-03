@@ -9,22 +9,30 @@
    לא דורש שינוי בשאר הקוד.
    ============================================================ */
 
-const Cloud = (() => {
-  /* אפשר להטמיע כאן קבוע, או להזין במסך הפרופיל.
-     ה-anon key מיועד לחשיפה פומבית — מה שמגן על הנתונים
-     היא מדיניות ה-RLS, לא הסתרת המפתח. */
-  const DEFAULT_URL = '';
-  const DEFAULT_KEY = '';
+/* ------------------------------------------------------------
+   הגדרת החיבור — ממלאים כאן פעם אחת, ואף משתמש לא רואה את זה.
 
+   Supabase → Project Settings → API:
+     SUPABASE_URL      = Project URL
+     SUPABASE_ANON_KEY = anon public key
+
+   ה-anon key נועד לחשיפה פומבית. מה שמגן על הנתונים היא מדיניות
+   ה-RLS ב-schema.sql, שאוכפת במסד עצמו שכל משתמש נוגע רק בשורות
+   שלו. אל תשים כאן לעולם את ה-service_role key.
+   ------------------------------------------------------------ */
+const SUPABASE_URL      = '';
+const SUPABASE_ANON_KEY = '';
+
+const Cloud = (() => {
   const LS = {
     get(k){ try { return localStorage.getItem(k); } catch(e){ return null; } },
     set(k,v){ try { localStorage.setItem(k,v); } catch(e){} },
     del(k){ try { localStorage.removeItem(k); } catch(e){} }
   };
 
-  let cfg = {
-    url: (LS.get('maazan:sb:url') || DEFAULT_URL).replace(/\/+$/,''),
-    key:  LS.get('maazan:sb:key') || DEFAULT_KEY
+  const cfg = {
+    url: (SUPABASE_URL || '').trim().replace(/\/+$/,''),
+    key: (SUPABASE_ANON_KEY || '').trim()
   };
   let session = null;
   try { session = JSON.parse(LS.get('maazan:sb:session') || 'null'); } catch(e){ session = null; }
@@ -40,13 +48,6 @@ const Cloud = (() => {
   function signedIn(){ return !!(session && session.access_token); }
   function user(){ return session && session.user ? session.user : null; }
 
-  function configure(url, key){
-    cfg.url = (url || '').trim().replace(/\/+$/,'');
-    cfg.key = (key || '').trim();
-    LS.set('maazan:sb:url', cfg.url);
-    LS.set('maazan:sb:key', cfg.key);
-    emit();
-  }
   function setSession(s){
     session = s;
     if (s) LS.set('maazan:sb:session', JSON.stringify(s));
@@ -154,7 +155,7 @@ const Cloud = (() => {
   window.addEventListener('online', flush);
 
   return {
-    ready, signedIn, user, configure, cfg: () => cfg,
+    ready, signedIn, user, cfg: () => cfg,
     signUp, signIn, signOut, pull, enqueue, flush,
     pending: () => Object.keys(queue).length,
     lastSync: () => LS.get('maazan:sb:lastsync'),
