@@ -576,24 +576,51 @@ $('addEx').addEventListener('click', () => {
 });
 
 /* ============================================================
-   מצלמה — סריקת ברקוד וצילום מנה
+   מצלמה — סריקת ברקוד
    ============================================================ */
-const ZXING_URL = 'https://cdn.jsdelivr.net/npm/@zxing/library@0.21.3/umd/index.min.js';
-let camStream = null, camLoop = null, zxReader = null;
+let camStream = null, camLoop = null, zxReader = null, camTrack = null, hintTimer = null;
 
 function showCam(title, hint){
   $('camTitle').textContent = title;
   $('camHint').textContent = hint;
+  $('camManual').hidden = true;
+  $('camManualBtn').hidden = false;
+  $('camTorch').hidden = true;
   $('cam').hidden = false;
 }
 function closeCam(){
   $('cam').hidden = true;
-  if (camLoop) { clearInterval(camLoop); camLoop = null; }
-  if (zxReader) { try { zxReader.reset(); } catch(e){} zxReader = null; }
-  if (camStream) { camStream.getTracks().forEach(t => t.stop()); camStream = null; }
+  if (camLoop){ clearInterval(camLoop); camLoop = null; }
+  if (hintTimer){ clearTimeout(hintTimer); hintTimer = null; }
+  if (zxReader){ try { zxReader.reset(); } catch(e){} zxReader = null; }
+  if (camStream){ camStream.getTracks().forEach(t => t.stop()); camStream = null; }
+  camTrack = null;
   $('camVideo').srcObject = null;
 }
 $('camClose').addEventListener('click', closeCam);
+$('camManualBtn').addEventListener('click', () => {
+  $('camManual').hidden = false;
+  $('camManualBtn').hidden = true;
+  $('camCode').focus();
+});
+$('camCodeGo').addEventListener('click', () => {
+  const v = $('camCode').value.replace(/\D/g,'');
+  if (v.length < 6){ toast('מספר ברקוד לא תקין'); return; }
+  $('camCode').value = '';
+  onBarcode(v);
+});
+$('camCode').addEventListener('keydown', e => { if (e.key === 'Enter') $('camCodeGo').click(); });
+
+/* האם BarcodeDetector באמת עובד כאן?
+   בכרום בדסקטופ האובייקט קיים אבל רשימת הפורמטים ריקה,
+   וה-detect פשוט לא מוצא כלום לנצח. לכן בודקים פורמטים ולא קיום. */
+async function nativeDetectorOK(){
+  if (!('BarcodeDetector' in window)) return false;
+  try {
+    const f = await window.BarcodeDetector.getSupportedFormats();
+    return !!f && f.indexOf('ean_13') > -1;
+  } catch(e){ return false; }
+}
 
 function loadScript(src){
   return new Promise((res, rej) => {
@@ -602,6 +629,15 @@ function loadScript(src){
     document.head.appendChild(s);
   });
 }
+async function ensureZXing(){
+  if (window.ZXing && window.ZXing.BrowserMultiFormatReader) return true;
+  try { await loadScript('./vendor/zxing.min.js'); }
+  catch(e){
+    try { await loadScript('https://cdn.jsdelivr.net/npm/@zxing/library@0.21.3/umd/index.min.js'); }
+    catch(e2){ return false; }
+  }
+  return !!(window.ZXing && window.ZXing.BrowserMultiFormatReader);
+}
 
 async function scanBarcode(){
   if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia){
@@ -609,38 +645,87 @@ async function scanBarcode(){
   }
   showCam('סריקת ברקוד', 'כוון את הברקוד למסגרת');
   const video = $('camVideo');
-  try {
-    camStream = await navigator.mediaDevices.getUserMedia({video:{facingMode:{ideal:'environment'}}});
-    video.srcObject = camStream;
-    await video.play();
-  } catch(e){
+
+  /* רזולוציה נמוכה היא הסיבה הנפוצה ביותר לכך שברקוד לא נקרא:
+     הפסים הדקים של EAN-13 פשוט לא נפרדים ב-640x480. */
+  const tries = [
+    {video:{facingMode:{exact:'environment'}, width:{ideal:1920}, height:{ideal:1080}}},
+    {video:{facingMode:{ideal:'environment'}, width:{ideal:1280}, height:{ideal:720}}},
+    {video:{facingMode:'environment'}},
+    {video:true}
+  ];
+  for (const c of tries){
+    try { camStream = await navigator.mediaDevices.getUserMedia(c); break; } catch(e){}
+  }
+  if (!camStream){
     closeCam();
-    toast(e && e.name === 'NotAllowedError' ? 'לא ניתנה הרשאה למצלמה' : 'לא הצלחתי לפתוח את המצלמה');
+    toast('לא הצלחתי לפתוח את המצלמה — בדוק שההרשאה ניתנה');
     return;
   }
 
-  const formats = ['ean_13','ean_8','upc_a','upc_e','code_128'];
-  if ('BarcodeDetector' in window){
+  video.srcObject = camStream;
+  try { await video.play(); } catch(e){}
+  await new Promise(res => {
+    if (video.readyState >= 2) return res();
+    video.onloadeddata = res;
+    setTimeout(res, 2500);
+  });
+
+  camTrack = camStream.getVideoTracks()[0];
+  try {
+    const caps = camTrack.getCapabilities ? camTrack.getCapabilities() : {};
+    if (caps.focusMode && caps.focusMode.indexOf('continuous') > -1){
+      await camTrack.applyConstraints({advanced:[{focusMode:'continuous'}]});
+    }
+    if (caps.torch){
+      $('camTorch').hidden = false;
+      $('camTorch').onclick = async () => {
+        const on = $('camTorch').dataset.on === '1';
+        try {
+          await camTrack.applyConstraints({advanced:[{torch:!on}]});
+          $('camTorch').dataset.on = on ? '0' : '1';
+          $('camTorch').textContent = on ? 'הדלקת פנס' : 'כיבוי פנס';
+        } catch(e){}
+      };
+    }
+  } catch(e){}
+
+  hintTimer = setTimeout(() => {
+    $('camHint').textContent = 'קרב את המצלמה עד שהברקוד ממלא את המסגרת';
+  }, 7000);
+
+  const formats = ['ean_13','ean_8','upc_a','upc_e','code_128','itf'];
+  if (await nativeDetectorOK()){
     let det;
     try { det = new window.BarcodeDetector({formats}); } catch(e){ det = new window.BarcodeDetector(); }
     camLoop = setInterval(async () => {
+      if (!camStream) return;
       try {
         const codes = await det.detect(video);
         if (codes && codes.length) onBarcode(codes[0].rawValue);
       } catch(e){}
-    }, 350);
-  } else {
-    $('camHint').textContent = 'טוען סורק…';
-    try { await loadScript(ZXING_URL); }
-    catch(e){ closeCam(); toast('צריך חיבור לאינטרנט לסריקה הראשונה'); return; }
-    $('camHint').textContent = 'כוון את הברקוד למסגרת';
-    zxReader = new window.ZXing.BrowserMultiFormatReader();
-    zxReader.decodeFromVideoElement(video, res => { if (res) onBarcode(res.getText()); });
+    }, 300);
+    return;
   }
+
+  $('camHint').textContent = 'מפעיל סורק…';
+  if (!(await ensureZXing())){
+    closeCam(); toast('הסורק לא נטען'); return;
+  }
+  $('camHint').textContent = 'כוון את הברקוד למסגרת';
+  const hints = new Map();
+  try {
+    const F = window.ZXing.BarcodeFormat, H = window.ZXing.DecodeHintType;
+    hints.set(H.POSSIBLE_FORMATS, [F.EAN_13, F.EAN_8, F.UPC_A, F.UPC_E, F.CODE_128, F.ITF]);
+    hints.set(H.TRY_HARDER, true);
+  } catch(e){}
+  zxReader = new window.ZXing.BrowserMultiFormatReader(hints, 250);
+  zxReader.decodeFromVideoElement(video, res => { if (res) onBarcode(res.getText()); });
 }
 
 let lastCode = null;
 async function onBarcode(code){
+  code = String(code || '').trim();
   if (!code || code === lastCode) return;
   lastCode = code;
   setTimeout(() => { lastCode = null; }, 2500);
@@ -648,40 +733,55 @@ async function onBarcode(code){
   closeCam();
   toast('מחפש את המוצר…');
   const food = await lookupBarcode(code);
-  if (!food){ toast('המוצר לא נמצא במאגר — אפשר להוסיף אותו ידנית'); openSheet('new'); return; }
+  if (!food){
+    toast('המוצר לא נמצא במאגר — הוסף אותו פעם אחת ידנית');
+    openSheet('new');
+    return;
+  }
   if (!state.custom.some(f => f.n === food.n)){ state.custom.unshift(food); saveCustom(); }
   openSheet('search');
   pickFood(food.n);
 }
 
+/* UPC-A בן 12 ספרות נשמר ב-Open Food Facts עם אפס מוביל,
+   וההפך קורה גם הוא. לכן מנסים כמה וריאציות לפני שמוותרים. */
+function codeVariants(code){
+  const out = [code];
+  if (code.length === 12) out.push('0' + code);
+  if (code.length === 13 && code[0] === '0') out.push(code.slice(1));
+  if (code.length === 8)  out.push(code.padStart(13,'0'));
+  return out;
+}
+
 async function lookupBarcode(code){
-  const url = 'https://world.openfoodfacts.org/api/v2/product/' + encodeURIComponent(code) +
-              '.json?fields=product_name,product_name_he,brands,nutriments,serving_quantity';
-  let j;
-  try {
-    const r = await fetch(url);
-    j = await r.json();
-  } catch(e){ toast('אין חיבור לאינטרנט'); return null; }
-  if (!j || j.status === 0 || !j.product) return null;
+  for (const c of codeVariants(code)){
+    const url = 'https://world.openfoodfacts.org/api/v2/product/' + encodeURIComponent(c) +
+                '.json?fields=product_name,product_name_he,brands,nutriments,serving_quantity';
+    let j;
+    try { j = await (await fetch(url)).json(); }
+    catch(e){ toast('אין חיבור לאינטרנט'); return null; }
+    if (!j || j.status === 0 || !j.product) continue;
 
-  const p = j.product, N = p.nutriments || {};
-  let kcal = N['energy-kcal_100g'];
-  if (kcal == null && N['energy_100g'] != null) kcal = N['energy_100g'] / 4.184;
-  if (kcal == null) return null;
+    const p = j.product, N = p.nutriments || {};
+    let kcal = N['energy-kcal_100g'];
+    if (kcal == null && N['energy_100g'] != null) kcal = N['energy_100g'] / 4.184;
+    if (kcal == null) continue;
 
-  const name = (p.product_name_he || p.product_name || 'מוצר ' + code).trim();
-  const brand = (p.brands || '').split(',')[0].trim();
-  const food = {
-    n: brand && name.indexOf(brand) === -1 ? name + ' · ' + brand : name,
-    g: 'ברקוד ' + code,
-    k: round(kcal, 1),
-    p: round(N['proteins_100g'] || 0, 1),
-    c: round(N['carbohydrates_100g'] || 0, 1),
-    f: round(N['fat_100g'] || 0, 1)
-  };
-  const sq = parseFloat(p.serving_quantity);
-  if (sq > 0 && sq < 1000) food.u = ['מנה (' + Math.round(sq) + ' ג׳)', Math.round(sq)];
-  return food;
+    const name = (p.product_name_he || p.product_name || 'מוצר ' + c).trim();
+    const brand = (p.brands || '').split(',')[0].trim();
+    const food = {
+      n: brand && name.indexOf(brand) === -1 ? name + ' · ' + brand : name,
+      g: 'ברקוד ' + c,
+      k: round(kcal, 1),
+      p: round(N['proteins_100g'] || 0, 1),
+      c: round(N['carbohydrates_100g'] || 0, 1),
+      f: round(N['fat_100g'] || 0, 1)
+    };
+    const sq = parseFloat(p.serving_quantity);
+    if (sq > 0 && sq < 1000) food.u = ['מנה (' + Math.round(sq) + ' ג׳)', Math.round(sq)];
+    return food;
+  }
+  return null;
 }
 
 /* ---------- meal photo ---------- */
@@ -854,6 +954,17 @@ async function reloadEverything(){
   renderAll();
 }
 
+/* ---------- בדיקות קלט משותפות ---------- */
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
+function checkCredentials(mode, email, pass, pass2){
+  if (!email)                      return 'צריך להזין אימייל';
+  if (!EMAIL_RE.test(email))       return 'האימייל לא נראה תקין';
+  if (!pass)                       return 'צריך להזין סיסמה';
+  if (mode === 'up' && pass.length < 6)  return 'הסיסמה צריכה להיות באורך 6 תווים לפחות';
+  if (mode === 'up' && pass !== pass2)   return 'הסיסמאות אינן זהות';
+  return null;
+}
+
 /* ---------- ממשק החשבון ---------- */
 function renderAccount(){
   const cfgd = Cloud.ready(), inn = Cloud.signedIn();
@@ -872,32 +983,54 @@ function renderAccount(){
 }
 Cloud.onChange(renderAccount);
 
-$('btnSignIn').addEventListener('click', () => doAuth('in'));
-$('btnSignUp').addEventListener('click', () => doAuth('up'));
+let acctMode = 'in';
+function acctSetMode(m){
+  acctMode = m;
+  const up = m === 'up';
+  $('acctPass2Row').hidden  = !up;
+  $('btnAuth').textContent  = up ? 'יצירת חשבון' : 'כניסה';
+  $('btnAuthToggle').textContent = up ? 'כבר יש לי חשבון — כניסה' : 'אין לי חשבון — הרשמה';
+  $('acctPass').setAttribute('autocomplete', up ? 'new-password' : 'current-password');
+  if (!up) $('acctPass2').value = '';
+}
+acctSetMode('in');
+$('btnAuthToggle').addEventListener('click', () => acctSetMode(acctMode === 'up' ? 'in' : 'up'));
+$('btnAuth').addEventListener('click', () => doAuth(acctMode));
+
 async function doAuth(mode){
-  const email = $('acctMail').value.trim(), pass = $('acctPass').value;
-  if (!email || !pass){ toast('צריך אימייל וסיסמה'); return; }
-  if (mode === 'up' && pass.length < 6){ toast('הסיסמה צריכה להיות באורך 6 תווים לפחות'); return; }
-  const btn = mode === 'in' ? $('btnSignIn') : $('btnSignUp');
-  const label = btn.textContent; btn.textContent = 'רגע…'; btn.disabled = true;
+  const email = $('acctMail').value.trim(), pass = $('acctPass').value, pass2 = $('acctPass2').value;
+  const err = checkCredentials(mode, email, pass, pass2);
+  if (err){ toast(err); return; }
+  const btn = $('btnAuth'), label = btn.textContent;
+  btn.textContent = 'רגע…'; btn.disabled = true;
   try {
     if (mode === 'up'){
       const r = await Cloud.signUp(email, pass);
-      if (r.needsConfirm){ toast('נשלח אליך מייל אישור — אשר אותו ואז התחבר'); return; }
+      if (r.needsConfirm){ toast('נשלח אליך מייל אישור — אשר אותו ואז התחבר'); acctSetMode('in'); return; }
     } else {
       await Cloud.signIn(email, pass);
     }
-    $('acctPass').value = '';
+    $('acctPass').value = ''; $('acctPass2').value = '';
     await syncFromCloud();
     await reloadEverything();
     renderAccount();
     toast('מחובר · הנתונים סונכרנו');
   } catch(e){
-    toast(String(e.message || e).indexOf('Invalid') === 0 ? 'אימייל או סיסמה שגויים' : (e.message || 'ההתחברות נכשלה'));
+    toast(authError(e));
   } finally {
     btn.textContent = label; btn.disabled = false;
   }
 }
+
+function authError(e){
+  const m = String((e && e.message) || e || '');
+  if (m.indexOf('Invalid') === 0)      return 'אימייל או סיסמה שגויים';
+  if (m.indexOf('already') > -1)       return 'האימייל הזה כבר רשום — נסה כניסה';
+  if (m.indexOf('weak') > -1)          return 'הסיסמה חלשה מדי';
+  if (/Failed to fetch|NetworkError/.test(m)) return 'אין חיבור לשרת';
+  return m || 'הפעולה נכשלה';
+}
+
 $('btnSignOut').addEventListener('click', async () => {
   await Cloud.signOut();
   renderAccount();
@@ -938,8 +1071,13 @@ function obSetMode(m){
   $('obGo').textContent     = up ? 'יצירת חשבון' : 'כניסה';
   $('obToggle').textContent = up ? 'כבר יש לי חשבון — כניסה' : 'אין לי חשבון — הרשמה';
   $('obPass').setAttribute('autocomplete', up ? 'new-password' : 'current-password');
+  $('obPass2Row').hidden = !up;
+  if (!up) $('obPass2').value = '';
 }
 $('obToggle').addEventListener('click', () => obSetMode(obMode === 'up' ? 'in' : 'up'));
+['obMail','obPass','obPass2'].forEach(id => {
+  $(id).addEventListener('keydown', e => { if (e.key === 'Enter') $('obGo').click(); });
+});
 
 $('obSex').addEventListener('click', e => {
   const b = e.target.closest('button'); if (!b) return;
@@ -947,9 +1085,9 @@ $('obSex').addEventListener('click', e => {
 });
 
 $('obGo').addEventListener('click', async () => {
-  const email = $('obMail').value.trim(), pass = $('obPass').value;
-  if (!email || !pass){ toast('צריך אימייל וסיסמה'); return; }
-  if (obMode === 'up' && pass.length < 6){ toast('הסיסמה צריכה להיות באורך 6 תווים לפחות'); return; }
+  const email = $('obMail').value.trim(), pass = $('obPass').value, pass2 = $('obPass2').value;
+  const err = checkCredentials(obMode, email, pass, pass2);
+  if (err){ toast(err); return; }
   const btn = $('obGo'), label = btn.textContent;
   btn.textContent = 'רגע…'; btn.disabled = true;
   try {
@@ -959,7 +1097,7 @@ $('obGo').addEventListener('click', async () => {
     } else {
       await Cloud.signIn(email, pass);
     }
-    $('obPass').value = '';
+    $('obPass').value = ''; $('obPass2').value = '';
     await syncFromCloud();
     await reloadEverything();
     renderAccount();
@@ -968,10 +1106,7 @@ $('obGo').addEventListener('click', async () => {
     if (existing){ obFinishNow(); toast('מחובר · הנתונים שוחזרו'); }
     else { obPrefill(); obStep(2); }
   } catch(e){
-    const m = String(e.message || e);
-    toast(m.indexOf('Invalid') === 0 ? 'אימייל או סיסמה שגויים'
-        : m.indexOf('already') > -1 ? 'האימייל הזה כבר רשום — נסה כניסה'
-        : (m || 'הפעולה נכשלה'));
+    toast(authError(e));
   } finally {
     btn.textContent = label; btn.disabled = false;
   }
