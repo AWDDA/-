@@ -1584,34 +1584,54 @@ async function scanBarcode(){
   }
   $('camHint').textContent = 'כוון את הברקוד למסגרת';
 
+  const Z = window.ZXing;
   const hints = new Map();
-  try {
-    const F = window.ZXing.BarcodeFormat, H = window.ZXing.DecodeHintType;
-    hints.set(H.POSSIBLE_FORMATS, [F.EAN_13, F.EAN_8, F.UPC_A, F.UPC_E, F.CODE_128, F.ITF]);
-  } catch(e){}
-  zxReader = new window.ZXing.BrowserMultiFormatReader(hints);
+  hints.set(Z.DecodeHintType.POSSIBLE_FORMATS, [
+    Z.BarcodeFormat.EAN_13, Z.BarcodeFormat.EAN_8,
+    Z.BarcodeFormat.UPC_A,  Z.BarcodeFormat.UPC_E,
+    Z.BarcodeFormat.CODE_128, Z.BarcodeFormat.ITF
+  ]);
+  const reader = new Z.MultiFormatReader();
+  reader.setHints(hints);
+  zxReader = reader;
 
-  /* מפענחים בעצמנו במקום decodeFromVideoElement.
-     הספרייה מפענחת את הפריים המלא, ובאייפון מחזור כזה על 1080p
-     לא מספיק להסתיים לפני שהבא מתחיל — המצלמה פתוחה ושום דבר
-     לא קורה. כאן חותכים את הרצועה שבתוך המסגרת, מקטינים ל-900
-     פיקסלים רוחב, ורק אותה מפענחים. */
   const canvas = document.createElement('canvas');
   let ctx;
   try { ctx = canvas.getContext('2d', {willReadFrequently:true}); }
   catch(e){ ctx = canvas.getContext('2d'); }
 
-  let tick = 0;
+  /* מפענחים בעצמנו ולא דרך decodeFromVideoElement: הספרייה מפענחת
+     את הפריים המלא, ובאייפון מחזור כזה על 1080p לא מספיק להסתיים
+     לפני שהבא מתחיל. כאן חותכים את הרצועה שבמסגרת ומקטינים ל-900px. */
+  function tryDecode(alsoInverted){
+    const src = new Z.HTMLCanvasElementLuminanceSource(canvas);
+    const sources = alsoInverted ? [src, new Z.InvertedLuminanceSource(src)] : [src];
+    for (const lum of sources){
+      try {
+        const res = reader.decode(new Z.BinaryBitmap(new Z.HybridBinarizer(lum)));
+        if (res) return res.getText();
+      } catch(e){
+        if (!(e instanceof Z.NotFoundException) && !/NotFound/.test(String(e && e.name))){
+          throw e;                    /* שגיאה אמיתית — לא נבלע אותה */
+        }
+      } finally {
+        try { reader.reset(); } catch(e){}
+      }
+    }
+    return null;
+  }
+
+  let tick = 0, reported = false;
   camLoop = setInterval(() => {
     if (!camStream || !zxReader) return;
     const vw = video.videoWidth, vh = video.videoHeight;
     if (!vw || !vh) return;
 
-    /* רוב הזמן סורקים את הרצועה המרכזית; כל פריים שלישי את הפריים
-       המלא, למקרה שהברקוד נמצא מחוץ למסגרת שמוצגת על המסך. */
+    /* רוב הפריימים — הרצועה המרכזית; כל שלישי — הפריים המלא,
+       למקרה שהברקוד מחוץ למסגרת שמוצגת. */
     const band = (tick++ % 3) !== 0;
-    const cw = band ? Math.round(vw * 0.88) : vw;
-    const ch = band ? Math.round(vh * 0.42) : vh;
+    const cw = band ? Math.round(vw * 0.9) : vw;
+    const ch = band ? Math.round(vh * 0.45) : vh;
     const sx = Math.round((vw - cw) / 2), sy = Math.round((vh - ch) / 2);
     const scale = Math.min(1, 900 / cw);
     canvas.width  = Math.round(cw * scale);
@@ -1619,9 +1639,15 @@ async function scanBarcode(){
     ctx.drawImage(video, sx, sy, cw, ch, 0, 0, canvas.width, canvas.height);
 
     try {
-      const r = zxReader.decodeFromCanvas(canvas);
-      if (r) onBarcode(r.getText());
-    } catch(e){ /* NotFoundException — הפריים הזה פשוט לא הכיל ברקוד */ }
+      const text = tryDecode(tick % 4 === 0);
+      if (text) onBarcode(text);
+    } catch(e){
+      if (!reported){
+        reported = true;
+        console.error('barcode decode failed:', e);
+        toast('שגיאה בסורק: ' + ((e && e.message) || e));
+      }
+    }
   }, 200);
 }
 
