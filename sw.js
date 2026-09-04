@@ -1,5 +1,5 @@
 /* מאזן — service worker: אופליין מלא לקבצי האפליקציה */
-const CACHE = 'maazan-glass-v7';
+const CACHE = 'maazan-glass-v8';
 const ASSETS = ['./', './index.html', './app.js', './cloud.js', './vendor/zxing.min.js', './manifest.webmanifest',
                 './icons/icon-192.png', './icons/icon-512.png'];
 

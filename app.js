@@ -649,7 +649,7 @@ async function scanBarcode(){
   /* רזולוציה נמוכה היא הסיבה הנפוצה ביותר לכך שברקוד לא נקרא:
      הפסים הדקים של EAN-13 פשוט לא נפרדים ב-640x480. */
   const tries = [
-    {video:{facingMode:{exact:'environment'}, width:{ideal:1920}, height:{ideal:1080}}},
+    {video:{facingMode:{ideal:'environment'}, width:{ideal:1920}, height:{ideal:1080}}},
     {video:{facingMode:{ideal:'environment'}, width:{ideal:1280}, height:{ideal:720}}},
     {video:{facingMode:'environment'}},
     {video:true}
@@ -663,6 +663,10 @@ async function scanBarcode(){
     return;
   }
 
+  /* ספארי לא ינגן וידאו בלי שלושת אלה, ובלי ניגון videoWidth נשאר 0 */
+  video.setAttribute('playsinline', '');
+  video.setAttribute('webkit-playsinline', '');
+  video.muted = true;
   video.srcObject = camStream;
   try { await video.play(); } catch(e){}
   await new Promise(res => {
@@ -690,9 +694,16 @@ async function scanBarcode(){
     }
   } catch(e){}
 
+  if (!video.videoWidth){
+    closeCam();
+    toast('המצלמה לא החזירה תמונה — נסה לסגור ולפתוח את הלשונית');
+    return;
+  }
   hintTimer = setTimeout(() => {
-    $('camHint').textContent = 'קרב את המצלמה עד שהברקוד ממלא את המסגרת';
-  }, 7000);
+    $('camHint').textContent = 'קרב עד שהברקוד ממלא את רוחב המסגרת, והחזק יציב';
+    $('camManual').hidden = false;
+    $('camManualBtn').hidden = true;
+  }, 8000);
 
   const formats = ['ean_13','ean_8','upc_a','upc_e','code_128','itf'];
   if (await nativeDetectorOK()){
@@ -713,14 +724,46 @@ async function scanBarcode(){
     closeCam(); toast('הסורק לא נטען'); return;
   }
   $('camHint').textContent = 'כוון את הברקוד למסגרת';
+
   const hints = new Map();
   try {
     const F = window.ZXing.BarcodeFormat, H = window.ZXing.DecodeHintType;
     hints.set(H.POSSIBLE_FORMATS, [F.EAN_13, F.EAN_8, F.UPC_A, F.UPC_E, F.CODE_128, F.ITF]);
-    hints.set(H.TRY_HARDER, true);
   } catch(e){}
-  zxReader = new window.ZXing.BrowserMultiFormatReader(hints, 250);
-  zxReader.decodeFromVideoElement(video, res => { if (res) onBarcode(res.getText()); });
+  zxReader = new window.ZXing.BrowserMultiFormatReader(hints);
+
+  /* מפענחים בעצמנו במקום decodeFromVideoElement.
+     הספרייה מפענחת את הפריים המלא, ובאייפון מחזור כזה על 1080p
+     לא מספיק להסתיים לפני שהבא מתחיל — המצלמה פתוחה ושום דבר
+     לא קורה. כאן חותכים את הרצועה שבתוך המסגרת, מקטינים ל-900
+     פיקסלים רוחב, ורק אותה מפענחים. */
+  const canvas = document.createElement('canvas');
+  let ctx;
+  try { ctx = canvas.getContext('2d', {willReadFrequently:true}); }
+  catch(e){ ctx = canvas.getContext('2d'); }
+
+  let tick = 0;
+  camLoop = setInterval(() => {
+    if (!camStream || !zxReader) return;
+    const vw = video.videoWidth, vh = video.videoHeight;
+    if (!vw || !vh) return;
+
+    /* רוב הזמן סורקים את הרצועה המרכזית; כל פריים שלישי את הפריים
+       המלא, למקרה שהברקוד נמצא מחוץ למסגרת שמוצגת על המסך. */
+    const band = (tick++ % 3) !== 0;
+    const cw = band ? Math.round(vw * 0.88) : vw;
+    const ch = band ? Math.round(vh * 0.42) : vh;
+    const sx = Math.round((vw - cw) / 2), sy = Math.round((vh - ch) / 2);
+    const scale = Math.min(1, 900 / cw);
+    canvas.width  = Math.round(cw * scale);
+    canvas.height = Math.round(ch * scale);
+    ctx.drawImage(video, sx, sy, cw, ch, 0, 0, canvas.width, canvas.height);
+
+    try {
+      const r = zxReader.decodeFromCanvas(canvas);
+      if (r) onBarcode(r.getText());
+    } catch(e){ /* NotFoundException — הפריים הזה פשוט לא הכיל ברקוד */ }
+  }, 200);
 }
 
 let lastCode = null;
