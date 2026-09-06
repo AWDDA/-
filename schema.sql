@@ -94,11 +94,21 @@ create policy "coach requests link" on public.coach_links
                 where p.user_id = auth.uid() and p.role = 'coach')
   );
 
--- המתאמן מאשר, דוחה או מבטל; המאמן יכול לבטל בקשה שלו
+-- העדכון מפוצל לשניים בכוונה. מדיניות אחת לשני הצדדים אפשרה למאמן
+-- לשלוח PATCH ולהעביר את עצמו ל-approved בלי אישור — כלומר לעקוף את
+-- כל מודל ההסכמה. ההחלטה שייכת למתאמן בלבד.
 drop policy if exists "either side updates link" on public.coach_links;
-create policy "either side updates link" on public.coach_links
-  for update using (auth.uid() = trainee_id or auth.uid() = coach_id)
-             with check (auth.uid() = trainee_id or auth.uid() = coach_id);
+
+drop policy if exists "trainee decides link" on public.coach_links;
+create policy "trainee decides link" on public.coach_links
+  for update using      (auth.uid() = trainee_id)
+             with check (auth.uid() = trainee_id);
+
+-- המאמן יכול רק לבקש מחדש או להסיר את עצמו. approved אינו באפשרויות.
+drop policy if exists "coach requests or cancels" on public.coach_links;
+create policy "coach requests or cancels" on public.coach_links
+  for update using      (auth.uid() = coach_id)
+             with check (auth.uid() = coach_id and status in ('pending','revoked'));
 
 drop policy if exists "either side deletes link" on public.coach_links;
 create policy "either side deletes link" on public.coach_links

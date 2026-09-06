@@ -1435,13 +1435,19 @@ async function runSearch(term){
   let rows = [];
   try { rows = await Cloud.searchUsers(term); }
   catch(e){ $('coachResults').innerHTML = '<li class="empty">החיפוש נכשל</li>'; return; }
-  const linked = new Set(state.links.map(l => l.trainee_id));
+  /* רק קישור חי חוסם בקשה חדשה. מבוטל או שנדחה — אפשר לבקש שוב. */
+  const ACTIVE = ['pending', 'approved'];
+  const linked = new Set(state.links.filter(l => ACTIVE.indexOf(l.status) > -1)
+                                    .map(l => l.trainee_id));
+  const past = new Set(state.links.filter(l => ACTIVE.indexOf(l.status) === -1)
+                                  .map(l => l.trainee_id));
   $('coachResults').innerHTML = rows.length
     ? rows.map(p =>
         '<li><div class="nm"><b>' + esc(personLabel(p)) + '</b><span>@' + esc(p.username) + '</span></div>' +
         (linked.has(p.user_id)
           ? '<span class="tag">כבר ברשימה</span>'
-          : '<button class="mini go" data-add="' + p.user_id + '">בקשת גישה</button>') +
+          : '<button class="mini go" data-add="' + p.user_id + '">' +
+            (past.has(p.user_id) ? 'בקשה חוזרת' : 'בקשת גישה') + '</button>') +
         '</li>').join('')
     : '<li class="empty">לא נמצא מתאמן בשם הזה</li>';
 }
@@ -1453,7 +1459,11 @@ $('coachResults').addEventListener('click', async e => {
     toast('הבקשה נשלחה, ממתינה לאישור המתאמן');
     $('coachQ').value = ''; $('coachResults').innerHTML = '';
     refreshCoach();
-  } catch(err){ toast('שליחת הבקשה נכשלה'); }
+  } catch(err){
+    const m = String((err && err.message) || err);
+    console.error('requestLink failed:', err);
+    toast(/409|duplicate|unique/i.test(m) ? 'כבר קיימת בקשה למתאמן הזה' : m);
+  }
 });
 
 async function refreshCoach(){

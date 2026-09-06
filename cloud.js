@@ -220,11 +220,20 @@ const Cloud = (() => {
                        '&select=id,coach_id,status,requested_at&order=requested_at.desc')) || [];
   }
 
+  /* בקשה חוזרת אחרי ביטול: יש אילוץ ייחודיות על (coach_id, trainee_id),
+     אז INSERT רגיל ייכשל ב-409. on_conflict מפנה את PostgREST לאילוץ
+     הנכון, וההוספה הופכת לעדכון של השורה הקיימת בחזרה ל-pending. */
   async function requestLink(traineeId){
-    await rest('coach_links', {
+    await rest('coach_links?on_conflict=coach_id,trainee_id', {
       method: 'POST',
       headers: {Prefer: 'resolution=merge-duplicates,return=minimal'},
-      body: JSON.stringify({coach_id: user().id, trainee_id: traineeId, status: 'pending'})
+      body: JSON.stringify({
+        coach_id: user().id,
+        trainee_id: traineeId,
+        status: 'pending',
+        requested_at: new Date().toISOString(),
+        decided_at: null
+      })
     });
   }
 

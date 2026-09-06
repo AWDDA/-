@@ -159,3 +159,36 @@ Realtime עושה את זה עם מנוי לטבלת `messages` — שינוי �
 
 **שים לב:** את `schema.sql` צריך להריץ שוב, הוא מוסיף את טבלת `messages`
 ואת המדיניות שלה.
+
+
+---
+
+## ביטול גישה ובקשה חוזרת
+
+מתאמן שמבטל מאמן מעביר את הקישור ל-`revoked`. השורה נשארת — היא נושאת
+את היסטוריית השיחה — אבל היא לא נחשבת קישור פעיל:
+
+* המאמן לא רואה את המתאמן ברשימה, ולא קורא את הנתונים שלו.
+* בחיפוש, המתאמן חוזר להיות זמין עם כפתור «בקשה חוזרת».
+* בקשה חוזרת היא upsert על האילוץ `(coach_id, trainee_id)` שמחזיר את
+  הסטטוס ל-`pending`. בלי `on_conflict` מפורש, PostgREST היה מנסה
+  INSERT ונופל על 409.
+
+### תיקון אבטחה בגרסה הזאת
+
+מדיניות העדכון על `coach_links` הייתה אחת לשני הצדדים, ולכן אפשרה
+למאמן לשלוח `PATCH status=approved` ולאשר את עצמו. היא פוצלה:
+
+```sql
+create policy "trainee decides link" on public.coach_links
+  for update using (auth.uid() = trainee_id) with check (auth.uid() = trainee_id);
+
+create policy "coach requests or cancels" on public.coach_links
+  for update using      (auth.uid() = coach_id)
+             with check (auth.uid() = coach_id and status in ('pending','revoked'));
+```
+
+המאמן יכול רק לבקש מחדש או להסיר את עצמו. `approved` אינו באפשרויות
+שלו — האישור שייך למתאמן בלבד, ונאכף במסד.
+
+**חובה להריץ את `schema.sql` שוב** כדי שהתיקון ייכנס לתוקף.
