@@ -1342,7 +1342,7 @@ function maybeOnboard(){
    שורות של מתאמן רק כשקיים קישור מאושר. הקוד כאן הוא הממשק,
    לא ההגנה — ביטול אישור סוגר את הגישה גם אם הקוד לא ידע על כך.
    ============================================================ */
-const APP_VERSION = 17;
+const APP_VERSION = 18;
 const USERNAME_RE = /^[a-z0-9._-]{3,20}$/i;
 let coachTimer = null;
 
@@ -1626,19 +1626,30 @@ async function drawLive(){
 
 /* ---------- צ׳אט מאמן ומתאמן ---------- */
 let chatTimer = null, chatSince = null, chatLink = null;
+let chatSeen = new Set();          /* מזהי הודעות שכבר על המסך */
+let chatTmp = 0;                   /* מונה להודעות אופטימיות */
+const imgCache = {};               /* נתיב → קישור חתום */
 
 function openChat(linkId, withName){
   if (!linkId){ toast('אין קישור פעיל'); return; }
-  chatLink = linkId; chatSince = null;
+  chatLink = linkId; chatSince = null; chatSeen = new Set();
   $('chatWith').textContent = withName || 'שיחה';
   $('chatLog').innerHTML = '<div class="chatempty"><i class="spin"></i>טוען…</div>';
   $('chatPanel').hidden = false;
   document.body.style.overflow = 'hidden';
   loadChat(true);
-  if (chatTimer) clearInterval(chatTimer);
-  chatTimer = setInterval(() => { if (chatLink) loadChat(false); }, 5000);
+  startChatPolling(2000);
   setTimeout(() => $('chatInput').focus(), 120);
 }
+
+/* קצב הרענון מתכוונן: מהר אחרי פעילות, איטי כשהשיחה שקטה.
+   כך התגובה מיידית בזמן שיחה בלי להעמיס כשאין מה למשוך. */
+function startChatPolling(ms){
+  if (chatTimer) clearInterval(chatTimer);
+  chatTimer = setInterval(() => { if (chatLink) loadChat(false); }, ms);
+  chatTimer.rate = ms;
+}
+let idleRounds = 0;
 
 function closeChat(){
   chatLink = null;
@@ -1648,14 +1659,52 @@ function closeChat(){
 }
 $('chatClose').addEventListener('click', closeChat);
 document.addEventListener('keydown', e => {
-  if (e.key === 'Escape' && !$('chatPanel').hidden) closeChat();
+  if (e.key === 'Escape'){
+    if (!$('lightbox').hidden){ $('lightbox').hidden = true; return; }
+    if (!$('chatPanel').hidden) closeChat();
+  }
 });
 
-function chatBubble(m, mine){
-  const t = new Date(m.created_at).toLocaleTimeString('he-IL', {hour:'2-digit', minute:'2-digit'});
-  return '<div class="msg ' + (mine ? 'me' : 'them') + '">' + esc(m.body) +
+function bubbleHtml(m, mine, cls){
+  const t = m.created_at
+    ? new Date(m.created_at).toLocaleTimeString('he-IL', {hour:'2-digit', minute:'2-digit'})
+    : '';
+  const img = m.image_path
+    ? '<img data-img="' + esc(m.image_path) + '" alt="תמונה">'
+    : '';
+  const body = m.body ? esc(m.body) : '';
+  return '<div class="msg ' + (mine ? 'me' : 'them') + (cls ? ' ' + cls : '') +
+         '" data-id="' + esc(m.id) + '">' + img + body +
          '<time>' + t + '</time></div>';
 }
+
+function appendBubble(html){
+  const log = $('chatLog');
+  const empty = log.querySelector('.chatempty');
+  if (empty) log.innerHTML = '';
+  log.insertAdjacentHTML('beforeend', html);
+  log.scrollTop = log.scrollHeight;
+  return log.lastElementChild;
+}
+
+/* התמונות בדלי פרטי, אז כל אחת נטענת דרך קישור חתום */
+async function hydrateImages(root){
+  const imgs = (root || $('chatLog')).querySelectorAll('img[data-img]:not([src])');
+  for (const el of imgs){
+    const path = el.dataset.img;
+    try {
+      if (!imgCache[path]) imgCache[path] = await Cloud.imageUrl(path, 3600);
+      el.src = imgCache[path];
+    } catch(e){ el.replaceWith(Object.assign(document.createElement('div'),
+      {className:'chatempty', textContent:'התמונה לא נטענה'})); }
+  }
+}
+
+$('chatLog').addEventListener('click', e => {
+  const img = e.target.closest('img[data-img]');
+  if (img && img.src){ $('lightboxImg').src = img.src; $('lightbox').hidden = false; }
+});
+$('lightbox').addEventListener('click', () => { $('lightbox').hidden = true; });
 
 async function loadChat(full){
   const id = chatLink;
@@ -1669,35 +1718,125 @@ async function loadChat(full){
 
   const me = Cloud.user() ? Cloud.user().id : null;
   const log = $('chatLog');
+
   if (full){
+    chatSeen = new Set();
     log.innerHTML = rows.length
-      ? rows.map(m => chatBubble(m, m.sender_id === me)).join('')
+      ? rows.map(m => { chatSeen.add(m.id); return bubbleHtml(m, m.sender_id === me); }).join('')
       : '<div class="chatempty">אין עדיין הודעות.<br>כתוב משהו כדי להתחיל.</div>';
-  } else if (rows.length){
-    const empty = log.querySelector('.chatempty');
-    if (empty) log.innerHTML = '';
-    log.insertAdjacentHTML('beforeend', rows.map(m => chatBubble(m, m.sender_id === me)).join(''));
+    log.scrollTop = log.scrollHeight;
+  } else {
+    /* ההודעות שלי כבר על המסך מהשליחה האופטימית — לא לשכפל */
+    const fresh = rows.filter(m => !chatSeen.has(m.id));
+    if (fresh.length){
+      fresh.forEach(m => chatSeen.add(m.id));
+      appendBubble(fresh.map(m => bubbleHtml(m, m.sender_id === me)).join(''));
+    }
+    idleRounds = fresh.length ? 0 : idleRounds + 1;
+    if (idleRounds === 15 && chatTimer && chatTimer.rate === 2000) startChatPolling(6000);
   }
   if (rows.length) chatSince = rows[rows.length - 1].created_at;
-  if (full || rows.length) log.scrollTop = log.scrollHeight;
+  hydrateImages();
+}
+
+/* שליחה אופטימית: הבועה מופיעה מיד, התיבה מתרוקנת מיד,
+   והשרת רק מאשר. זה מה שמסיר את התחושה של דיליי. */
+async function deliver(body, imagePath, localUrl){
+  const tmpId = 'tmp-' + (++chatTmp);
+  const el = appendBubble(bubbleHtml(
+    {id: tmpId, body: body, image_path: null, created_at: new Date().toISOString()},
+    true, 'pending'));
+  if (localUrl){
+    const img = document.createElement('img');
+    img.src = localUrl;
+    el.insertBefore(img, el.firstChild);
+  }
+  try {
+    const row = await Cloud.sendMessage(chatLink, body, imagePath);
+    el.classList.remove('pending');
+    if (row){ el.dataset.id = row.id; chatSeen.add(row.id); chatSince = row.created_at; }
+    idleRounds = 0;
+    startChatPolling(2000);
+  } catch(e){
+    const m = String((e && e.message) || e);
+    el.classList.remove('pending');
+    el.classList.add('failed');
+    const btn = document.createElement('button');
+    btn.className = 'retry';
+    btn.textContent = /403|policy/i.test(m) ? 'אין הרשאה לשלוח — ייתכן שהגישה בוטלה' : 'שליחה נכשלה, נסה שוב';
+    btn.onclick = () => { el.remove(); deliver(body, imagePath, localUrl); };
+    el.appendChild(btn);
+  }
 }
 
 async function sendChat(){
   const input = $('chatInput');
   const body = input.value.trim();
   if (!body || !chatLink) return;
-  input.value = '';
-  try {
-    await Cloud.sendMessage(chatLink, body);
-    await loadChat(false);
-  } catch(e){
-    input.value = body;
-    const m = String((e && e.message) || e);
-    toast(/403|policy/i.test(m) ? 'אין הרשאה לשלוח — ייתכן שהגישה בוטלה' : m);
-  }
+  input.value = '';                 /* מתרוקן לפני כל פנייה לרשת */
+  input.focus();
+  deliver(body, null, null);
 }
 $('chatSend').addEventListener('click', sendChat);
 $('chatInput').addEventListener('keydown', e => { if (e.key === 'Enter') sendChat(); });
+
+/* ---------- תמונה בצ׳אט ---------- */
+$('chatPhoto').addEventListener('click', () => $('chatFile').click());
+$('chatFile').addEventListener('change', async e => {
+  const file = e.target.files && e.target.files[0];
+  e.target.value = '';
+  if (!file || !chatLink) return;
+
+  let blob, localUrl;
+  try {
+    blob = await shrinkToBlob(file, 1200, 0.75);
+    localUrl = URL.createObjectURL(blob);
+  } catch(err){ toast('לא הצלחתי לקרוא את התמונה'); return; }
+
+  const tmpId = 'tmp-' + (++chatTmp);
+  const el = appendBubble(bubbleHtml(
+    {id: tmpId, body: '', image_path: null, created_at: new Date().toISOString()},
+    true, 'pending'));
+  const img = document.createElement('img');
+  img.src = localUrl;
+  el.insertBefore(img, el.firstChild);
+
+  try {
+    const path = await Cloud.uploadImage(chatLink, blob);
+    const row = await Cloud.sendMessage(chatLink, '', path);
+    el.classList.remove('pending');
+    if (row){ el.dataset.id = row.id; chatSeen.add(row.id); chatSince = row.created_at; }
+    imgCache[path] = localUrl;
+    idleRounds = 0;
+    startChatPolling(2000);
+  } catch(err){
+    el.classList.remove('pending');
+    el.classList.add('failed');
+    const m = String((err && err.message) || err);
+    const b = document.createElement('button');
+    b.className = 'retry';
+    b.textContent = m;
+    el.appendChild(b);
+  }
+});
+
+/* הקטנה לפני העלאה: תמונת טלפון היא 3–6MB, וזה מיותר לצ׳אט */
+function shrinkToBlob(file, max, quality){
+  return new Promise((res, rej) => {
+    const img = new Image();
+    img.onload = () => {
+      const s = Math.min(1, max / Math.max(img.width, img.height));
+      const cv = document.createElement('canvas');
+      cv.width  = Math.round(img.width * s);
+      cv.height = Math.round(img.height * s);
+      cv.getContext('2d').drawImage(img, 0, 0, cv.width, cv.height);
+      URL.revokeObjectURL(img.src);
+      cv.toBlob(b => b ? res(b) : rej(new Error('canvas')), 'image/jpeg', quality || 0.75);
+    };
+    img.onerror = () => rej(new Error('image'));
+    img.src = URL.createObjectURL(file);
+  });
+}
 
 /* ---------- toast ---------- */
 let toastT;

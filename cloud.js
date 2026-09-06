@@ -289,20 +289,72 @@ const Cloud = (() => {
     return map;
   }
 
+  /* ---------- אחסון תמונות ---------- */
+  async function storage(path, opts){
+    if (!signedIn()) throw new Error('לא מחובר');
+    if (session.expires_at && Date.now() > session.expires_at) await refresh();
+    const o = opts || {};
+    const r = await withTimeout(cfg.url + '/storage/v1/' + path, {
+      method: o.method || 'GET',
+      headers: Object.assign({
+        apikey: cfg.key,
+        Authorization: 'Bearer ' + session.access_token
+      }, o.headers || {}),
+      body: o.body
+    }, 30000);
+    if (!r.ok){
+      let detail = '';
+      try { const j = await r.json(); detail = j.message || j.error || ''; } catch(e){}
+      throw new Error('שגיאת אחסון ' + r.status + (detail ? ': ' + detail : ''));
+    }
+    return r.status === 204 ? null : r.json();
+  }
+
+  /* הנתיב מתחיל במזהה הקישור, וזה מה שמדיניות האחסון בודקת */
+  async function uploadImage(linkId, blob){
+    const name = linkId + '/' + Date.now() + '-' +
+                 Math.random().toString(36).slice(2, 9) + '.jpg';
+    await storage('object/chat/' + name, {
+      method: 'POST',
+      headers: {'Content-Type': 'image/jpeg', 'x-upsert': 'false'},
+      body: blob
+    });
+    return name;
+  }
+
+  /* הדלי פרטי, אז כל תמונה נצפית דרך קישור חתום קצר-מועד */
+  async function imageUrl(path, seconds){
+    const r = await storage('object/sign/chat/' + path, {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({expiresIn: seconds || 3600})
+    });
+    if (!r || !r.signedURL) throw new Error('לא התקבל קישור לתמונה');
+    return cfg.url + '/storage/v1' + r.signedURL;
+  }
+
   /* ---------- הודעות ---------- */
   async function messages(linkId, sinceIso){
     let q = 'messages?link_id=eq.' + linkId +
-            '&select=id,sender_id,body,created_at&order=created_at.asc&limit=300';
+            '&select=id,sender_id,body,image_path,created_at&order=created_at.asc&limit=300';
     if (sinceIso) q += '&created_at=gt.' + encodeURIComponent(sinceIso);
     return (await rest(q)) || [];
   }
 
-  async function sendMessage(linkId, body){
-    await rest('messages', {
+  async function sendMessage(linkId, body, imagePath){
+    /* return=representation מחזיר את השורה שנוצרה, כולל created_at
+       האמיתי. זה חוסך סיבוב נוסף לשרת אחרי כל שליחה. */
+    const rows = await rest('messages', {
       method: 'POST',
-      headers: {Prefer: 'return=minimal'},
-      body: JSON.stringify({link_id: linkId, sender_id: user().id, body: String(body).trim()})
+      headers: {Prefer: 'return=representation'},
+      body: JSON.stringify({
+        link_id: linkId,
+        sender_id: user().id,
+        body: String(body || '').trim(),
+        image_path: imagePath || null
+      })
     });
+    return (rows && rows[0]) || null;
   }
 
   /* קריאת הנתונים של מתאמן. מותרת רק כשקיים קישור מאושר —
@@ -318,6 +370,7 @@ const Cloud = (() => {
     myProfile, saveProfile, usernameTaken, searchUsers,
     coachLinks, traineeLinks, requestLink, setLinkStatus,
     profilesByIds, pullFor, messages, sendMessage, setRole, diagnose,
+    uploadImage, imageUrl,
     pending: () => Object.keys(queue).length,
     lastSync: () => LS.get('maazan:sb:lastsync'),
     onChange: fn => listeners.push(fn)

@@ -164,3 +164,44 @@ create policy "link members send messages" on public.messages
                   and l.status = 'approved'
                   and (l.coach_id = auth.uid() or l.trainee_id = auth.uid()))
   );
+
+-- ============================================================
+-- 6. תמונות בצ׳אט
+-- ============================================================
+alter table public.messages add column if not exists image_path text;
+
+-- הודעה חייבת להכיל טקסט או תמונה, ולא בהכרח את שניהם
+alter table public.messages drop constraint if exists messages_body_check;
+alter table public.messages drop constraint if exists messages_content_check;
+alter table public.messages alter column body set default '';
+alter table public.messages add constraint messages_content_check check (
+  char_length(body) <= 2000
+  and (char_length(body) > 0 or image_path is not null)
+);
+
+-- דלי פרטי לתמונות. הנתיב הוא <link_id>/<קובץ>, וזה מה שמדיניות
+-- האחסון נשענת עליו כדי לדעת מי רשאי לגעת בו.
+insert into storage.buckets (id, name, public)
+values ('chat', 'chat', false)
+on conflict (id) do nothing;
+
+drop policy if exists "link members upload chat images" on storage.objects;
+create policy "link members upload chat images" on storage.objects
+  for insert to authenticated
+  with check (
+    bucket_id = 'chat'
+    and exists (select 1 from public.coach_links l
+                where l.id::text = (storage.foldername(name))[1]
+                  and l.status = 'approved'
+                  and (l.coach_id = auth.uid() or l.trainee_id = auth.uid()))
+  );
+
+drop policy if exists "link members read chat images" on storage.objects;
+create policy "link members read chat images" on storage.objects
+  for select to authenticated
+  using (
+    bucket_id = 'chat'
+    and exists (select 1 from public.coach_links l
+                where l.id::text = (storage.foldername(name))[1]
+                  and (l.coach_id = auth.uid() or l.trainee_id = auth.uid()))
+  );
