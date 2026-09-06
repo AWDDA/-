@@ -154,9 +154,95 @@ const Cloud = (() => {
 
   window.addEventListener('online', flush);
 
+  /* ---------- פרופיל ציבורי: שם משתמש ותפקיד ---------- */
+  async function myProfile(){
+    if (!signedIn()) return null;
+    const r = await rest('profiles?user_id=eq.' + user().id +
+                         '&select=user_id,username,display_name,role');
+    return (r && r[0]) || null;
+  }
+
+  async function usernameTaken(username){
+    const u = encodeURIComponent(String(username).toLowerCase());
+    const r = await rest('profiles?username=ilike.' + u + '&select=user_id&limit=1');
+    return !!(r && r.length);
+  }
+
+  async function saveProfile(p){
+    const row = {
+      user_id: user().id,
+      username: String(p.username).trim(),
+      display_name: (p.display_name || '').trim() || null,
+      role: p.role === 'coach' ? 'coach' : 'trainee'
+    };
+    await rest('profiles', {
+      method: 'POST',
+      headers: {Prefer: 'resolution=merge-duplicates,return=minimal'},
+      body: JSON.stringify(row)
+    });
+    return row;
+  }
+
+  /* ---------- חיפוש וקישור ---------- */
+  async function searchUsers(term){
+    const t = encodeURIComponent('*' + String(term).trim() + '*');
+    const r = await rest('profiles?or=(username.ilike.' + t + ',display_name.ilike.' + t + ')' +
+                         '&role=eq.trainee&select=user_id,username,display_name&limit=15');
+    return (r || []).filter(x => x.user_id !== user().id);
+  }
+
+  /* בקשות שהמאמן שלח */
+  async function coachLinks(){
+    return (await rest('coach_links?coach_id=eq.' + user().id +
+                       '&select=id,trainee_id,status,requested_at&order=requested_at.desc')) || [];
+  }
+
+  /* בקשות שהגיעו למתאמן */
+  async function traineeLinks(){
+    return (await rest('coach_links?trainee_id=eq.' + user().id +
+                       '&select=id,coach_id,status,requested_at&order=requested_at.desc')) || [];
+  }
+
+  async function requestLink(traineeId){
+    await rest('coach_links', {
+      method: 'POST',
+      headers: {Prefer: 'resolution=merge-duplicates,return=minimal'},
+      body: JSON.stringify({coach_id: user().id, trainee_id: traineeId, status: 'pending'})
+    });
+  }
+
+  async function setLinkStatus(id, status){
+    await rest('coach_links?id=eq.' + id, {
+      method: 'PATCH',
+      headers: {Prefer: 'return=minimal'},
+      body: JSON.stringify({status, decided_at: new Date().toISOString()})
+    });
+  }
+
+  /* שמות של קבוצת מזהים, לתצוגה ברשימות */
+  async function profilesByIds(ids){
+    const list = [...new Set(ids)].filter(Boolean);
+    if (!list.length) return {};
+    const r = await rest('profiles?user_id=in.(' + list.join(',') + ')' +
+                         '&select=user_id,username,display_name,role');
+    const map = {};
+    (r || []).forEach(p => { map[p.user_id] = p; });
+    return map;
+  }
+
+  /* קריאת הנתונים של מתאמן. מותרת רק כשקיים קישור מאושר —
+     ה-RLS הוא שמחליט, לא הקוד הזה. */
+  async function pullFor(userId){
+    return (await rest('app_data?user_id=eq.' + userId +
+                       '&select=key,value,updated_at')) || [];
+  }
+
   return {
     ready, signedIn, user, cfg: () => cfg,
     signUp, signIn, signOut, pull, enqueue, flush,
+    myProfile, saveProfile, usernameTaken, searchUsers,
+    coachLinks, traineeLinks, requestLink, setLinkStatus,
+    profilesByIds, pullFor,
     pending: () => Object.keys(queue).length,
     lastSync: () => LS.get('maazan:sb:lastsync'),
     onChange: fn => listeners.push(fn)

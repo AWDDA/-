@@ -148,7 +148,8 @@ const state = {
   log: emptyLog(),
   custom: [], recent: [], weights: {},
   targets:{kcal:0,p:0,c:0,f:0},
-  apiUrl:'', screen:'home', meal:'breakfast', pick:null
+  apiUrl:'', screen:'home', meal:'breakfast', pick:null,
+  me:null, links:[], names:{}, live:null
 };
 
 function emptyLog(){ return {breakfast:[],lunch:[],dinner:[],snacks:[],exercise:[],water:0}; }
@@ -160,8 +161,8 @@ function esc(s){ return String(s).replace(/[&<>"']/g, ch => ({'&':'&amp;','<':'&
 function allFoods(){ return state.custom.concat(FOODS); }
 
 /* ---------- calculations ---------- */
-function compute(){
-  const P = state.profile;
+function compute(P){
+  P = P || state.profile;
   const w = +P.weight||0, h = +P.height||0, a = +P.age||0;
   const bmr = P.sex === 'male' ? 10*w + 6.25*h - 5*a + 5 : 10*w + 6.25*h - 5*a - 161;
   const tdee = bmr * (+P.activity);
@@ -371,14 +372,17 @@ function renderWeight(){
 function renderAll(){ renderProfile(); renderDiary(); renderWater(); renderRecents(); renderSummary(); renderDate(); }
 
 /* ---------- navigation ---------- */
-const SUBS = {home:'סקירת היום', diary:'יומן האכילה', prog:'המגמה שלך', me:'היעד האישי'};
+const SUBS = {home:'סקירת היום', diary:'יומן האכילה', prog:'המגמה שלך',
+              me:'היעד האישי', coach:'המתאמנים שלי'};
 function goto(scr){
   state.screen = scr;
-  ['home','diary','prog','me'].forEach(s => { $('scr-'+s).hidden = (s !== scr); });
+  ['home','diary','prog','me','coach'].forEach(s => { $('scr-'+s).hidden = (s !== scr); });
   document.querySelectorAll('.tab').forEach(b => b.setAttribute('aria-current', b.dataset.scr === scr ? 'page' : 'false'));
   $('dateBar').style.display = (scr === 'home' || scr === 'diary') ? '' : 'none';
   $('barSub').textContent = SUBS[scr];
   if (scr === 'prog') renderProgress();
+  if (scr === 'coach') refreshCoach();
+  if (scr !== 'coach') stopLive();
   window.scrollTo({top:0});
 }
 document.querySelector('.tabbar').addEventListener('click', e => {
@@ -639,6 +643,34 @@ async function ensureZXing(){
   return !!(window.ZXing && window.ZXing.BrowserMultiFormatReader);
 }
 
+
+/* המסגרת שהמשתמש מיישר אליה חייבת להיות בדיוק האזור שנסרק.
+   object-fit: cover מקטין את הווידאו כדי לכסות את המסך וחותך
+   את העודף, אז ממירים את מלבן המסגרת חזרה לקואורדינטות המקור. */
+function frameSourceRect(video){
+  const vw = video.videoWidth, vh = video.videoHeight;
+  if (!vw || !vh) return null;
+  const vr = video.getBoundingClientRect();
+  const fr = $('camFrame').getBoundingClientRect();
+  if (!vr.width || !vr.height || !fr.width) return null;
+
+  const s = Math.max(vr.width / vw, vr.height / vh);
+  const offX = (vw * s - vr.width) / 2;
+  const offY = (vh * s - vr.height) / 2;
+
+  let sx = (fr.left - vr.left + offX) / s;
+  let sy = (fr.top  - vr.top  + offY) / s;
+  let sw = fr.width  / s;
+  let sh = fr.height / s;
+
+  /* קצת שוליים, בעיקר לגובה: ברקוד לא תמיד ממורכז לגמרי במסגרת */
+  const px = sw * 0.06, py = sh * 0.18;
+  sx -= px; sy -= py; sw += px * 2; sh += py * 2;
+  sx = Math.max(0, sx); sy = Math.max(0, sy);
+  sw = Math.min(sw, vw - sx); sh = Math.min(sh, vh - sy);
+  return (sw > 20 && sh > 20) ? {sx, sy, sw, sh} : null;
+}
+
 async function scanBarcode(){
   if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia){
     toast('הדפדפן הזה לא תומך במצלמה'); return;
@@ -749,7 +781,7 @@ async function scanBarcode(){
     const sources = alsoInverted ? [src, new Z.InvertedLuminanceSource(src)] : [src];
     for (const lum of sources){
       try {
-        const res = reader.decode(new Z.BinaryBitmap(new Z.HybridBinarizer(lum)));
+        const res = reader.decode(new Z.BinaryBitmap(new Z.HybridBinarizer(lum)), hints);
         if (res) return res.getText();
       } catch(e){
         if (!(e instanceof Z.NotFoundException) && !/NotFound/.test(String(e && e.name))){
@@ -768,19 +800,24 @@ async function scanBarcode(){
     const vw = video.videoWidth, vh = video.videoHeight;
     if (!vw || !vh) return;
 
-    /* רוב הפריימים — הרצועה המרכזית; כל שלישי — הפריים המלא,
-       למקרה שהברקוד מחוץ למסגרת שמוצגת. */
-    const band = (tick++ % 3) !== 0;
-    const cw = band ? Math.round(vw * 0.9) : vw;
-    const ch = band ? Math.round(vh * 0.45) : vh;
-    const sx = Math.round((vw - cw) / 2), sy = Math.round((vh - ch) / 2);
-    const scale = Math.min(1, 900 / cw);
-    canvas.width  = Math.round(cw * scale);
-    canvas.height = Math.round(ch * scale);
-    ctx.drawImage(video, sx, sy, cw, ch, 0, 0, canvas.width, canvas.height);
+    /* שלושה פריימים מתוך ארבעה: בדיוק מה שבתוך המסגרת.
+       הרביעי: הפריים המלא, למקרה שהברקוד מחוץ לה.
+       החיתוך הצמוד הוא העיקר — קורא ה-1D דוגם 15 שורות בלבד
+       על פני גובה התמונה, אז רצועה גבוהה מדי גורמת לכך שכמעט
+       אף שורה לא חוצה את הברקוד. */
+    const tight = (tick++ % 4) !== 0;
+    const r = tight ? frameSourceRect(video) : null;
+    const sx = r ? r.sx : 0, sy = r ? r.sy : 0;
+    const sw = r ? r.sw : vw, sh = r ? r.sh : vh;
+
+    const maxW = r ? 1400 : 1000;
+    const scale = Math.min(1, maxW / sw);
+    canvas.width  = Math.round(sw * scale);
+    canvas.height = Math.round(sh * scale);
+    ctx.drawImage(video, sx, sy, sw, sh, 0, 0, canvas.width, canvas.height);
 
     try {
-      const text = tryDecode(tick % 4 === 0);
+      const text = tryDecode(tick % 8 === 0);
       if (text) onBarcode(text);
     } catch(e){
       if (!reported){
@@ -1025,6 +1062,13 @@ async function reloadEverything(){
 
 /* ---------- בדיקות קלט משותפות ---------- */
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
+function checkUsername(u){
+  if (!u) return 'צריך לבחור שם משתמש';
+  if (!/^[a-zA-Z0-9._-]{3,20}$/.test(u))
+    return 'שם משתמש: 3–20 תווים באנגלית, ספרות, נקודה, מקף או קו תחתון';
+  return null;
+}
+
 function checkCredentials(mode, email, pass, pass2){
   if (!email)                      return 'צריך להזין אימייל';
   if (!EMAIL_RE.test(email))       return 'האימייל לא נראה תקין';
@@ -1057,6 +1101,8 @@ function acctSetMode(m){
   acctMode = m;
   const up = m === 'up';
   $('acctPass2Row').hidden  = !up;
+  $('acctUserRow').hidden   = !up;
+  $('acctIdentity').hidden  = !up;
   $('btnAuth').textContent  = up ? 'יצירת חשבון' : 'כניסה';
   $('btnAuthToggle').textContent = up ? 'כבר יש לי חשבון — כניסה' : 'אין לי חשבון — הרשמה';
   $('acctPass').setAttribute('autocomplete', up ? 'new-password' : 'current-password');
@@ -1070,12 +1116,19 @@ async function doAuth(mode){
   const email = $('acctMail').value.trim(), pass = $('acctPass').value, pass2 = $('acctPass2').value;
   const err = checkCredentials(mode, email, pass, pass2);
   if (err){ toast(err); return; }
+  const uname = $('acctUser').value.trim();
+  if (mode === 'up'){
+    const uerr = checkUsername(uname);
+    if (uerr){ toast(uerr); return; }
+  }
   const btn = $('btnAuth'), label = btn.textContent;
   btn.textContent = 'רגע…'; btn.disabled = true;
   try {
     if (mode === 'up'){
+      if (await Cloud.usernameTaken(uname)){ toast('שם המשתמש כבר תפוס'); return; }
       const r = await Cloud.signUp(email, pass);
       if (r.needsConfirm){ toast('נשלח אליך מייל אישור — אשר אותו ואז התחבר'); acctSetMode('in'); return; }
+      await Cloud.saveProfile({username: uname, display_name: uname, role: segValue('acctRole')});
     } else {
       await Cloud.signIn(email, pass);
     }
@@ -1083,6 +1136,7 @@ async function doAuth(mode){
     await syncFromCloud();
     await reloadEverything();
     renderAccount();
+    await loadMe();
     toast('מחובר · הנתונים סונכרנו');
   } catch(e){
     toast(authError(e));
@@ -1141,6 +1195,7 @@ function obSetMode(m){
   $('obToggle').textContent = up ? 'כבר יש לי חשבון — כניסה' : 'אין לי חשבון — הרשמה';
   $('obPass').setAttribute('autocomplete', up ? 'new-password' : 'current-password');
   $('obPass2Row').hidden = !up;
+  $('obIdentity').hidden = !up;
   if (!up) $('obPass2').value = '';
 }
 $('obToggle').addEventListener('click', () => obSetMode(obMode === 'up' ? 'in' : 'up'));
@@ -1157,12 +1212,19 @@ $('obGo').addEventListener('click', async () => {
   const email = $('obMail').value.trim(), pass = $('obPass').value, pass2 = $('obPass2').value;
   const err = checkCredentials(obMode, email, pass, pass2);
   if (err){ toast(err); return; }
+  const uname = $('obUser').value.trim();
+  if (obMode === 'up'){
+    const uerr = checkUsername(uname);
+    if (uerr){ toast(uerr); return; }
+  }
   const btn = $('obGo'), label = btn.textContent;
   btn.textContent = 'רגע…'; btn.disabled = true;
   try {
     if (obMode === 'up'){
+      if (await Cloud.usernameTaken(uname)){ toast('שם המשתמש כבר תפוס'); return; }
       const r = await Cloud.signUp(email, pass);
       if (r.needsConfirm){ toast('נשלח אליך מייל אישור — אשר אותו וחזור לכאן'); obSetMode('in'); return; }
+      await Cloud.saveProfile({username: uname, display_name: $('obName').value, role: segValue('obRole')});
     } else {
       await Cloud.signIn(email, pass);
     }
@@ -1170,6 +1232,7 @@ $('obGo').addEventListener('click', async () => {
     await syncFromCloud();
     await reloadEverything();
     renderAccount();
+    await loadMe();
     /* משתמש חוזר שכבר יש לו פרופיל בענן — אין טעם לשאול אותו שוב */
     const existing = await Store.get('maazan:profile');
     if (existing){ obFinishNow(); toast('מחובר · הנתונים שוחזרו'); }
@@ -1229,6 +1292,217 @@ function maybeOnboard(){
   $('onb').hidden = false;
 }
 
+
+/* ============================================================
+   מאמן ומתאמן
+   הגישה לנתונים נשענת על מדיניות ה-RLS ב-schema.sql: מאמן קורא
+   שורות של מתאמן רק כשקיים קישור מאושר. הקוד כאן הוא הממשק,
+   לא ההגנה — ביטול אישור סוגר את הגישה גם אם הקוד לא ידע על כך.
+   ============================================================ */
+const USERNAME_RE = /^[a-z0-9._-]{3,20}$/i;
+let coachTimer = null;
+
+function isCoach(){ return !!(state.me && state.me.role === 'coach'); }
+function personLabel(p){
+  if (!p) return 'משתמש';
+  return p.display_name ? p.display_name : '@' + p.username;
+}
+
+function segValue(id){
+  const b = [...$(id).children].find(x => x.getAttribute('aria-pressed') === 'true');
+  return b ? b.dataset.v : 'trainee';
+}
+function bindSeg(id){
+  $(id).addEventListener('click', e => {
+    const b = e.target.closest('button'); if (!b) return;
+    [...e.currentTarget.children].forEach(x => x.setAttribute('aria-pressed', String(x === b)));
+  });
+}
+bindSeg('obRole'); bindSeg('acctRole');
+
+async function loadMe(){
+  state.me = null;
+  if (!Cloud.signedIn() || !Cloud.ready()) { renderRoleUI(); return; }
+  try { state.me = await Cloud.myProfile(); } catch(e){}
+  renderRoleUI();
+  refreshRequests();
+}
+
+function renderRoleUI(){
+  const inn = Cloud.signedIn() && !!state.me;
+  $('coachEntry').hidden = !(inn && isCoach());
+  $('reqBlock').hidden   = !(inn && !isCoach());
+  if (inn && state.me){
+    $('coachEntrySub').textContent =
+      'מחובר כ־@' + state.me.username + '. חפש מתאמן לפי שם משתמש ובקש גישה ליומן שלו.';
+  }
+}
+
+/* ---------- צד המתאמן: בקשות נכנסות ---------- */
+async function refreshRequests(){
+  if (!Cloud.signedIn() || isCoach()) return;
+  let links = [];
+  try { links = await Cloud.traineeLinks(); } catch(e){ return; }
+  const names = await Cloud.profilesByIds(links.map(l => l.coach_id)).catch(() => ({}));
+  const pend = links.filter(l => l.status === 'pending');
+  const appr = links.filter(l => l.status === 'approved');
+  $('reqCount').textContent = pend.length ? pend.length + ' ממתינות' : '';
+
+  if (!links.length){
+    $('reqList').innerHTML = '<div class="empty">כשמאמן יבקש לצפות ביומן שלך, הבקשה תופיע כאן לאישור.</div>';
+    return;
+  }
+  $('reqList').innerHTML = links.filter(l => l.status !== 'declined' && l.status !== 'revoked')
+    .map(l => {
+      const p = names[l.coach_id];
+      const act = l.status === 'pending'
+        ? '<button class="mini go" data-ok="'+l.id+'">אישור</button>' +
+          '<button class="mini no" data-no="'+l.id+'">דחייה</button>'
+        : '<button class="mini no" data-no="'+l.id+'">ביטול גישה</button>';
+      return '<div class="person"><div class="who"><b>' + esc(personLabel(p)) + '</b>' +
+             '<span>' + (l.status === 'pending' ? 'מבקש לצפות ביומן שלך' : 'צופה ביומן שלך') +
+             '</span></div><div class="act">' + act + '</div></div>';
+    }).join('') ||
+    '<div class="empty">אין בקשות פעילות.</div>';
+}
+
+$('reqList').addEventListener('click', async e => {
+  const ok = e.target.closest('[data-ok]'), no = e.target.closest('[data-no]');
+  if (!ok && !no) return;
+  try {
+    await Cloud.setLinkStatus(ok ? ok.dataset.ok : no.dataset.no, ok ? 'approved' : 'revoked');
+    toast(ok ? 'הגישה אושרה' : 'הגישה בוטלה');
+    refreshRequests();
+  } catch(err){ toast('הפעולה נכשלה'); }
+});
+
+/* ---------- צד המאמן ---------- */
+let searchT;
+$('coachQ').addEventListener('input', e => {
+  clearTimeout(searchT);
+  const term = e.target.value.trim();
+  if (term.length < 2){ $('coachResults').innerHTML = ''; return; }
+  searchT = setTimeout(() => runSearch(term), 350);
+});
+
+async function runSearch(term){
+  let rows = [];
+  try { rows = await Cloud.searchUsers(term); }
+  catch(e){ $('coachResults').innerHTML = '<li class="empty">החיפוש נכשל</li>'; return; }
+  const linked = new Set(state.links.map(l => l.trainee_id));
+  $('coachResults').innerHTML = rows.length
+    ? rows.map(p =>
+        '<li><div class="nm"><b>' + esc(personLabel(p)) + '</b><span>@' + esc(p.username) + '</span></div>' +
+        (linked.has(p.user_id)
+          ? '<span class="tag">כבר ברשימה</span>'
+          : '<button class="mini go" data-add="' + p.user_id + '">בקשת גישה</button>') +
+        '</li>').join('')
+    : '<li class="empty">לא נמצא מתאמן בשם הזה</li>';
+}
+
+$('coachResults').addEventListener('click', async e => {
+  const b = e.target.closest('[data-add]'); if (!b) return;
+  try {
+    await Cloud.requestLink(b.dataset.add);
+    toast('הבקשה נשלחה, ממתינה לאישור המתאמן');
+    $('coachQ').value = ''; $('coachResults').innerHTML = '';
+    refreshCoach();
+  } catch(err){ toast('שליחת הבקשה נכשלה'); }
+});
+
+async function refreshCoach(){
+  if (!Cloud.signedIn()){ $('coachList').innerHTML = '<div class="empty">צריך להתחבר.</div>'; return; }
+  try { state.links = await Cloud.coachLinks(); }
+  catch(e){ $('coachList').innerHTML = '<div class="empty">טעינת הרשימה נכשלה.</div>'; return; }
+  state.names = await Cloud.profilesByIds(state.links.map(l => l.trainee_id)).catch(() => ({}));
+
+  const live = state.links.filter(l => l.status !== 'declined' && l.status !== 'revoked');
+  $('coachStatus').textContent = live.filter(l => l.status === 'approved').length + ' מאושרים';
+  $('coachList').innerHTML = live.length
+    ? live.map(l => {
+        const p = state.names[l.trainee_id];
+        const right = l.status === 'approved'
+          ? '<button class="mini go" data-view="' + l.trainee_id + '">צפייה</button>'
+          : '<span class="tag wait">ממתין לאישור</span>';
+        return '<div class="person"><div class="who"><b>' + esc(personLabel(p)) + '</b>' +
+               '<span>@' + esc(p ? p.username : '') + '</span></div>' +
+               '<div class="act">' + right + '</div></div>';
+      }).join('')
+    : '<div class="empty">עוד לא הוספת מתאמנים. חפש למעלה לפי שם משתמש.</div>';
+}
+
+$('coachList').addEventListener('click', e => {
+  const b = e.target.closest('[data-view]'); if (b) openLive(b.dataset.view);
+});
+
+/* ---------- תצוגה חיה של יום המתאמן ---------- */
+function stopLive(){
+  if (coachTimer){ clearInterval(coachTimer); coachTimer = null; }
+  state.live = null;
+  const el = $('liveBlock'); if (el) el.hidden = true;
+}
+$('liveClose').addEventListener('click', stopLive);
+
+async function openLive(traineeId){
+  state.live = traineeId;
+  const p = state.names[traineeId];
+  $('liveName').textContent = personLabel(p);
+  $('liveBlock').hidden = false;
+  $('liveBody').innerHTML = '<div class="empty"><i class="spin"></i>טוען…</div>';
+  await drawLive();
+  if (coachTimer) clearInterval(coachTimer);
+  coachTimer = setInterval(() => { if (state.live) drawLive(); }, 20000);
+}
+
+async function drawLive(){
+  const id = state.live;
+  let rows;
+  try { rows = await Cloud.pullFor(id); }
+  catch(e){
+    $('liveBody').innerHTML = '<div class="empty">אין גישה לנתונים. ייתכן שהמתאמן ביטל את האישור.</div>';
+    stopLive(); refreshCoach(); return;
+  }
+  if (state.live !== id) return;
+
+  const map = {};
+  rows.forEach(r => { map[r.key] = r.value; });
+  const parse = (k, d) => { try { return JSON.parse(map[k]); } catch(e){ return d; } };
+
+  const prof = parse('maazan:profile', null);
+  const log  = Object.assign(emptyLog(), parse('maazan:log:' + todayKey(), {}));
+  const t = {k:0,p:0,c:0,f:0};
+  MEALS.forEach(m => (log[m.id]||[]).forEach(i => { t.k+=i.k; t.p+=i.p; t.c+=i.c; t.f+=i.f; }));
+  const ex = (log.exercise||[]).reduce((s,i) => s + i.k, 0);
+  const T = prof ? compute(prof) : null;
+  const remain = T ? Math.round(T.target - t.k + ex) : null;
+
+  const rowsHtml = MEALS.map(m => {
+    const items = log[m.id] || [];
+    if (!items.length) return '';
+    return '<div style="margin-top:12px"><div class="mhead"><h3 style="font-size:var(--t-body)">' +
+      m.name + '</h3><div class="k">' + Math.round(items.reduce((s,i)=>s+i.k,0)) + ' קק״ל</div></div>' +
+      '<ul class="items">' + items.map(it =>
+        '<li><div class="nm"><b>' + esc(it.n) + '</b><span>' + esc(it.q||'') + '</span></div>' +
+        '<div class="num">' + Math.round(it.k) + '</div></li>').join('') + '</ul></div>';
+  }).join('');
+
+  const updated = rows.reduce((a,r) => r.updated_at > a ? r.updated_at : a, '');
+  $('liveBody').innerHTML =
+    '<div class="livegrid">' +
+      '<div><b>' + nf(t.k) + '</b><span>נאכלו</span></div>' +
+      '<div><b>' + (T ? nf(T.target) : '—') + '</b><span>יעד</span></div>' +
+      '<div><b style="color:' + (remain !== null && remain < 0 ? 'var(--bad)' : 'var(--state)') + '">' +
+        (remain === null ? '—' : nf(Math.abs(remain))) + '</b><span>' +
+        (remain !== null && remain < 0 ? 'מעל היעד' : 'נותרו') + '</span></div>' +
+    '</div>' +
+    '<div class="mrow"><span>חלבון</span><span>' + Math.round(t.p) + (T ? ' / ' + T.protein : '') + ' ג׳</span></div>' +
+    '<div class="mrow"><span>פחמימות</span><span>' + Math.round(t.c) + (T ? ' / ' + T.carbs : '') + ' ג׳</span></div>' +
+    '<div class="mrow"><span>שומן</span><span>' + Math.round(t.f) + (T ? ' / ' + T.fat : '') + ' ג׳</span></div>' +
+    (rowsHtml || '<div class="empty" style="margin-top:12px">עוד לא נרשם אוכל היום.</div>') +
+    (updated ? '<div class="empty" style="margin-top:12px">עודכן לאחרונה ' +
+      new Date(updated).toLocaleTimeString('he-IL',{hour:'2-digit',minute:'2-digit'}) + '</div>' : '');
+}
+
 /* ---------- toast ---------- */
 let toastT;
 function toast(msg){
@@ -1270,6 +1544,7 @@ window.addEventListener('appinstalled', () => { $('installBtn').hidden = true; }
   renderAll();
   goto('home');
   maybeOnboard();
+  loadMe();
   if ('serviceWorker' in navigator && location.protocol.indexOf('http') === 0) {
     navigator.serviceWorker.register('./sw.js').catch(() => {});
   }

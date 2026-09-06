@@ -247,6 +247,31 @@ option{background:#1B1F2B;color:var(--text)}
 .onb .steps i{height:3px;flex:1;border-radius:99px;background:var(--edge)}
 .onb .steps i.on{background:var(--state)}
 
+/* ---------- coach ---------- */
+.live{display:inline-flex;align-items:center;gap:6px;font-size:var(--t-micro);color:var(--state)}
+.live::before{content:"";width:7px;height:7px;border-radius:50%;background:var(--state);
+  animation:pulse 1.8s ease-in-out infinite}
+@keyframes pulse{50%{opacity:.25}}
+.person{display:flex;align-items:center;gap:12px;padding:11px 0}
+.person + .person{border-top:1px solid var(--edge)}
+.person .who{flex:1;min-width:0}
+.person .who b{display:block;font-size:var(--t-body);font-weight:500}
+.person .who span{display:block;color:var(--mut2);font-size:var(--t-micro)}
+.person .act{display:flex;gap:6px;flex:0 0 auto}
+.mini{background:var(--surface-2);border:1px solid var(--edge);color:var(--text);border-radius:999px;
+  padding:7px 13px;font:inherit;font-size:var(--t-micro);font-weight:500;cursor:pointer;white-space:nowrap}
+.mini.go{background:rgba(92,210,164,.16);border-color:rgba(92,210,164,.32);color:var(--state)}
+.mini.no{color:var(--mut)}
+.tag{font-size:var(--t-micro);color:var(--mut);white-space:nowrap}
+.tag.ok{color:var(--state)} .tag.wait{color:#E5B36A}
+.empty{color:var(--mut2);font-size:var(--t-small);line-height:1.7}
+.livegrid{display:grid;grid-template-columns:repeat(3,1fr);gap:1px;background:var(--edge);
+  border-radius:var(--r-sm);overflow:hidden;margin-bottom:14px}
+.livegrid div{background:rgba(255,255,255,.03);padding:12px 6px;text-align:center}
+.livegrid b{display:block;font-size:var(--t-num);font-weight:500;letter-spacing:-.02em;
+  line-height:1.2;font-variant-numeric:tabular-nums}
+.livegrid span{font-size:var(--t-micro);color:var(--mut)}
+
 /* ---------- camera ---------- */
 .cam{position:fixed;inset:0;z-index:70;background:#000}
 .cam[hidden]{display:none}
@@ -464,6 +489,15 @@ option{background:#1B1F2B;color:var(--text)}
             <input id="acctMail" type="email" autocomplete="email" placeholder="you@example.com"></div>
           <div class="field wide"><label for="acctPass">סיסמה</label>
             <input id="acctPass" type="password" autocomplete="current-password" placeholder="לפחות 6 תווים"></div>
+          <div class="field wide" id="acctIdentity" hidden>
+            <label>סוג החשבון</label>
+            <div class="seg" id="acctRole">
+              <button type="button" data-v="trainee" aria-pressed="true">מתאמן</button>
+              <button type="button" data-v="coach" aria-pressed="false">מאמן</button>
+            </div>
+          </div>
+          <div class="field wide" id="acctUserRow" hidden><label for="acctUser">שם משתמש</label>
+            <input id="acctUser" autocomplete="username" placeholder="באנגלית, בלי רווחים"></div>
           <div class="field wide" id="acctPass2Row" hidden><label for="acctPass2">אימות סיסמה</label>
             <input id="acctPass2" type="password" autocomplete="new-password" placeholder="הקלד שוב את אותה סיסמה"></div>
           <div class="field wide"><button class="btn" id="btnAuth">כניסה</button></div>
@@ -530,7 +564,37 @@ option{background:#1B1F2B;color:var(--text)}
         <p class="note" id="floorNote" hidden></p>
         <div class="btnrow"><button class="btn sec" id="logWeight">רישום המשקל להיום</button></div>
       </div>
+      <div class="block" id="coachEntry" hidden>
+        <div class="bhead"><h2>המתאמנים שלי</h2><a data-go="coach">פתיחה</a></div>
+        <p style="margin:0;color:var(--mut);font-size:var(--t-small);line-height:1.7"
+           id="coachEntrySub">חפש מתאמן לפי שם משתמש ובקש גישה לצפייה ביומן שלו.</p>
+      </div>
+
+      <div class="block" id="reqBlock" hidden>
+        <div class="bhead"><h2>בקשות מאמנים</h2><span id="reqCount"></span></div>
+        <div id="reqList"></div>
+      </div>
+
       <p class="legalnote">המספרים הם הערכה סטטיסטית ואינם ייעוץ תזונתי.<br>בלי חשבון הנתונים נשמרים במכשיר הזה בלבד.</p>
+    </section>
+    <!-- ============ COACH ============ -->
+    <section class="screen" id="scr-coach" hidden>
+      <div class="block">
+        <div class="bhead"><h2>חיפוש מתאמן</h2></div>
+        <input id="coachQ" type="search" placeholder="שם משתמש או שם לתצוגה" autocomplete="off">
+        <ul class="results" id="coachResults"></ul>
+      </div>
+
+      <div class="block">
+        <div class="bhead"><h2>המתאמנים שלי</h2><span id="coachStatus"></span></div>
+        <div id="coachList"></div>
+      </div>
+
+      <div class="block" id="liveBlock" hidden>
+        <div class="bhead"><h2 id="liveName">מתאמן</h2><span class="live" id="liveDot">חי</span></div>
+        <div id="liveBody"></div>
+        <div class="btnrow"><button class="btn sec" id="liveClose">סגירת התצוגה</button></div>
+      </div>
     </section>
   </main>
 
@@ -616,6 +680,18 @@ option{background:#1B1F2B;color:var(--text)}
       <div class="mark" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M4 8v8M20 8v8M7 6v12M17 6v12M7 12h10"/></svg></div>
       <h2 id="obTitle">ברוך הבא למאזן</h2>
       <p class="lead" id="obLead">פתח חשבון כדי שהיומן שלך יישמר ויעבור איתך בין הטלפון למחשב.</p>
+      <div class="form" id="obIdentity">
+        <div class="field wide"><label>סוג החשבון</label>
+          <div class="seg" id="obRole">
+            <button type="button" data-v="trainee" aria-pressed="true">מתאמן</button>
+            <button type="button" data-v="coach" aria-pressed="false">מאמן</button>
+          </div>
+        </div>
+        <div class="field wide"><label for="obUser">שם משתמש</label>
+          <input id="obUser" autocomplete="username" placeholder="באנגלית, בלי רווחים" inputmode="latin"></div>
+        <div class="field wide"><label for="obName">שם לתצוגה</label>
+          <input id="obName" autocomplete="name" placeholder="איך שיציג אותך המאמן"></div>
+      </div>
       <div class="form">
         <div class="field wide"><label for="obMail">אימייל</label>
           <input id="obMail" type="email" autocomplete="email" placeholder="you@example.com"></div>
@@ -671,7 +747,7 @@ option{background:#1B1F2B;color:var(--text)}
   <video id="camVideo" playsinline muted autoplay></video>
   <div class="camui">
     <div class="camtop"><button id="camClose">סגירה</button><span id="camTitle" style="font-weight:600">סריקת ברקוד</span><span style="width:64px"></span></div>
-    <div class="frame"></div>
+    <div class="frame" id="camFrame"></div>
     <div class="camfoot">
       <div class="camhint" id="camHint">כוון את הברקוד למסגרת</div>
       <button class="camaction" id="camTorch" hidden>הדלקת פנס</button>
