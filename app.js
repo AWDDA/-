@@ -1342,7 +1342,7 @@ function maybeOnboard(){
    שורות של מתאמן רק כשקיים קישור מאושר. הקוד כאן הוא הממשק,
    לא ההגנה — ביטול אישור סוגר את הגישה גם אם הקוד לא ידע על כך.
    ============================================================ */
-const APP_VERSION = 18;
+const APP_VERSION = 19;
 const USERNAME_RE = /^[a-z0-9._-]{3,20}$/i;
 let coachTimer = null;
 
@@ -1535,7 +1535,9 @@ async function refreshCoach(){
         const p = state.names[l.trainee_id];
         const right = l.status === 'approved'
           ? '<button class="mini go" data-view="' + l.trainee_id + '">צפייה</button>' +
-            '<button class="mini" data-chat="' + l.id + '" data-name="' + esc(personLabel(p)) + '">צ׳אט</button>'
+            '<button class="mini" data-chat="' + l.id + '" data-name="' + esc(personLabel(p)) + '">צ׳אט</button>' +
+            '<button class="mini" data-plan="' + l.id + '" data-tid="' + l.trainee_id +
+            '" data-name="' + esc(personLabel(p)) + '">תוכנית</button>'
           : '<span class="tag wait">ממתין לאישור</span>';
         return '<div class="person"><div class="who"><b>' + esc(personLabel(p)) + '</b>' +
                '<span>@' + esc(p ? p.username : '') + '</span></div>' +
@@ -1547,6 +1549,8 @@ async function refreshCoach(){
 $('coachRefresh').addEventListener('click', () => { refreshCoach(); toast('הרשימה רועננה'); });
 
 $('coachList').addEventListener('click', e => {
+  const pl = e.target.closest('[data-plan]');
+  if (pl){ openPlan(pl.dataset.plan, pl.dataset.tid, pl.dataset.name); return; }
   const ch = e.target.closest('[data-chat]');
   if (ch){ openChat(ch.dataset.chat, ch.dataset.name); return; }
   const b = e.target.closest('[data-view]'); if (b) openLive(b.dataset.view);
@@ -1567,6 +1571,8 @@ async function openLive(traineeId){
   const link = state.links.find(l => l.trainee_id === traineeId && l.status === 'approved');
   $('liveChat').hidden = !link;
   $('liveChat').onclick = () => openChat(link && link.id, personLabel(p));
+  $('livePlan').hidden = !link;
+  $('livePlan').onclick = () => openPlan(link && link.id, traineeId, personLabel(p));
   $('liveBlock').hidden = false;
   $('liveBody').innerHTML = '<div class="empty"><i class="spin"></i>טוען…</div>';
   await drawLive();
@@ -1606,6 +1612,25 @@ async function drawLive(){
         '<div class="num">' + Math.round(it.k) + '</div></li>').join('') + '</ul></div>';
   }).join('');
 
+  /* סטטוס האימון של היום, אם יש קישור פעיל */
+  let wk = '';
+  const lk = state.links.find(l => l.trainee_id === id && l.status === 'approved');
+  if (lk){
+    try {
+      const log = await Cloud.getWorkoutLog(lk.id, todayKey());
+      const plan = normalizePlan((await Cloud.getPlan(lk.id) || {}).plan);
+      const todays = plan[DAY_KEYS[new Date().getDay()]] || [];
+      if (!todays.length){
+        wk = '<div class="empty" style="margin-top:12px">היום יום מנוחה בתוכנית.</div>';
+      } else {
+        const done = (log && Array.isArray(log.done)) ? log.done.length : 0;
+        wk = '<div class="empty" style="margin-top:12px">אימון היום: ' +
+             (log && log.completed ? '<b style="color:var(--state)">בוצע</b>'
+                                   : done + ' מתוך ' + todays.length + ' תרגילים') + '</div>';
+      }
+    } catch(e){}
+  }
+
   const updated = rows.reduce((a,r) => r.updated_at > a ? r.updated_at : a, '');
   $('liveBody').innerHTML =
     '<div class="livegrid">' +
@@ -1618,7 +1643,7 @@ async function drawLive(){
     '<div class="mrow"><span>חלבון</span><span>' + Math.round(t.p) + (T ? ' / ' + T.protein : '') + ' ג׳</span></div>' +
     '<div class="mrow"><span>פחמימות</span><span>' + Math.round(t.c) + (T ? ' / ' + T.carbs : '') + ' ג׳</span></div>' +
     '<div class="mrow"><span>שומן</span><span>' + Math.round(t.f) + (T ? ' / ' + T.fat : '') + ' ג׳</span></div>' +
-    (rowsHtml || '<div class="empty" style="margin-top:12px">עוד לא נרשם אוכל היום.</div>') +
+    (rowsHtml || '<div class="empty" style="margin-top:12px">עוד לא נרשם אוכל היום.</div>') + wk +
     (updated ? '<div class="empty" style="margin-top:12px">עודכן לאחרונה ' +
       new Date(updated).toLocaleTimeString('he-IL',{hour:'2-digit',minute:'2-digit'}) + '</div>' : '');
 }
@@ -1836,6 +1861,251 @@ function shrinkToBlob(file, max, quality){
     img.onerror = () => rej(new Error('image'));
     img.src = URL.createObjectURL(file);
   });
+}
+
+
+/* ============================================================
+   תוכניות אימון
+   המאמן כותב, המתאמן מסמן ביצוע. ההפרדה הזאת נאכפת ב-RLS:
+   workout_plans ניתנת לכתיבה למאמן בלבד, workout_logs למתאמן בלבד.
+   ============================================================ */
+const DAY_KEYS = ['sun','mon','tue','wed','thu','fri','sat'];
+const DAY_HE   = ['ראשון','שני','שלישי','רביעי','חמישי','שישי','שבת'];
+const DAY_SHORT= ['א','ב','ג','ד','ה','ו','ש'];
+
+let planLink = null, planTrainee = null, planDay = 0, planData = {};
+
+function emptyPlan(){
+  const p = {};
+  DAY_KEYS.forEach(k => { p[k] = []; });
+  return p;
+}
+function normalizePlan(p){
+  const out = emptyPlan();
+  if (p && typeof p === 'object'){
+    DAY_KEYS.forEach(k => { if (Array.isArray(p[k])) out[k] = p[k]; });
+  }
+  return out;
+}
+function exLine(x){
+  const bits = [];
+  if (x.s) bits.push(x.s + ' סטים');
+  if (x.r) bits.push(x.r + ' חזרות');
+  if (x.rest) bits.push('מנוחה ' + x.rest);
+  if (x.note) bits.push(x.note);
+  return bits.join(' · ');
+}
+
+/* ---------- צד המאמן: עורך התוכנית ---------- */
+function renderDayTabs(el, active, counts, onPick){
+  el.innerHTML = DAY_KEYS.map((k, i) =>
+    '<button data-d="' + i + '" aria-pressed="' + (i === active) + '">' + DAY_SHORT[i] +
+    '<span class="n">' + (counts[k] ? counts[k] : '—') + '</span></button>').join('');
+  el.onclick = e => {
+    const b = e.target.closest('[data-d]');
+    if (b) onPick(+b.dataset.d);
+  };
+}
+
+async function openPlan(linkId, traineeId, name){
+  planLink = linkId; planTrainee = traineeId; planDay = new Date().getDay();
+  $('planWith').textContent = 'תוכנית · ' + (name || '');
+  $('planList').innerHTML = '<div class="empty"><i class="spin"></i>טוען…</div>';
+  $('planPanel').hidden = false;
+  document.body.style.overflow = 'hidden';
+  try {
+    const row = await Cloud.getPlan(linkId);
+    planData = normalizePlan(row && row.plan);
+  } catch(e){ planData = emptyPlan(); }
+  drawPlanEditor();
+}
+
+function closePlan(){
+  planLink = null;
+  $('planPanel').hidden = true;
+  document.body.style.overflow = '';
+}
+$('planClose').addEventListener('click', closePlan);
+
+function drawPlanEditor(){
+  const counts = {};
+  DAY_KEYS.forEach(k => { counts[k] = planData[k].length; });
+  renderDayTabs($('planDays'), planDay, counts, d => { planDay = d; drawPlanEditor(); });
+
+  const key = DAY_KEYS[planDay];
+  const list = planData[key];
+  $('planList').innerHTML =
+    '<div class="bhead" style="margin:14px 0 4px"><h2>יום ' + DAY_HE[planDay] + '</h2>' +
+    '<span>' + (list.length ? list.length + ' תרגילים' : 'יום מנוחה') + '</span></div>' +
+    (list.length
+      ? list.map((x, i) =>
+          '<div class="ex"><div class="num">' + (i + 1) + '</div>' +
+          '<div class="info"><b>' + esc(x.n) + '</b><span>' + esc(exLine(x)) + '</span></div>' +
+          '<button class="del" data-rm="' + i + '" aria-label="מחיקה">✕</button></div>').join('')
+      : '<div class="empty">אין תרגילים ליום הזה. הוסף למטה, או השאר ריק ליום מנוחה.</div>');
+}
+
+$('planList').addEventListener('click', e => {
+  const b = e.target.closest('[data-rm]'); if (!b) return;
+  planData[DAY_KEYS[planDay]].splice(+b.dataset.rm, 1);
+  drawPlanEditor();
+});
+
+$('exAdd').addEventListener('click', () => {
+  const n = $('exName').value.trim();
+  if (!n){ toast('צריך שם לתרגיל'); return; }
+  planData[DAY_KEYS[planDay]].push({
+    n,
+    s: parseInt($('exSets').value, 10) || null,
+    r: $('exReps').value.trim() || null,
+    rest: $('exRest').value.trim() || null,
+    note: $('exNote').value.trim() || null
+  });
+  ['exName','exSets','exReps','exRest','exNote'].forEach(id => { $(id).value = ''; });
+  $('exName').focus();
+  drawPlanEditor();
+});
+
+$('planCopy').addEventListener('click', () => {
+  const from = DAY_KEYS[planDay];
+  if (!planData[from].length){ toast('אין מה להעתיק מהיום הזה'); return; }
+  const target = prompt('להעתיק ליום (1=ראשון … 7=שבת):');
+  const t = parseInt(target, 10);
+  if (!(t >= 1 && t <= 7)) return;
+  planData[DAY_KEYS[t - 1]] = planData[from].map(x => Object.assign({}, x));
+  planDay = t - 1;
+  drawPlanEditor();
+  toast('הועתק ליום ' + DAY_HE[t - 1]);
+});
+
+$('planSave').addEventListener('click', async () => {
+  const btn = $('planSave'), label = btn.textContent;
+  btn.textContent = 'שומר…'; btn.disabled = true;
+  try {
+    await Cloud.savePlan(planLink, planTrainee, planData);
+    toast('התוכנית נשמרה');
+    closePlan();
+  } catch(e){
+    toast(String((e && e.message) || e));
+  } finally { btn.textContent = label; btn.disabled = false; }
+});
+
+/* ---------- צד המתאמן ---------- */
+let myLink = null, wkDay = new Date().getDay(), wkPlan = null, wkDone = [];
+
+$('progTabs').addEventListener('click', e => {
+  const b = e.target.closest('[data-t]'); if (!b) return;
+  const t = b.dataset.t;
+  [...e.currentTarget.children].forEach(x => x.setAttribute('aria-pressed', String(x === b)));
+  ['mine','workouts','friends'].forEach(k => { $('prog-' + k).hidden = (k !== t); });
+  if (t === 'workouts') loadMyWorkouts();
+});
+
+async function loadMyWorkouts(){
+  $('wkBody').innerHTML = '<div class="empty"><i class="spin"></i>טוען…</div>';
+  if (!Cloud.signedIn()){
+    $('wkBody').innerHTML = '<div class="empty">צריך להתחבר כדי לראות תוכנית.</div>';
+    return;
+  }
+  try {
+    const links = await Cloud.traineeLinks();
+    const appr = links.filter(l => l.status === 'approved');
+    if (!appr.length){
+      $('planCoach').textContent = '';
+      $('wkBody').innerHTML = '<div class="empty">אין לך עדיין מאמן מקושר. ' +
+        'כשמאמן יבקש גישה ותאשר, התוכנית שלו תופיע כאן.</div>';
+      $('wkHistory').innerHTML = '';
+      return;
+    }
+    myLink = appr[0];
+    const names = await Cloud.profilesByIds([myLink.coach_id]).catch(() => ({}));
+    const c = names[myLink.coach_id];
+    $('planCoach').textContent = c ? 'מאת ' + personLabel(c) : '';
+
+    const row = await Cloud.getPlan(myLink.id);
+    wkPlan = normalizePlan(row && row.plan);
+    const log = await Cloud.getWorkoutLog(myLink.id, todayKey());
+    wkDone = (log && Array.isArray(log.done)) ? log.done : [];
+    wkDay = new Date().getDay();
+    drawMyWorkouts();
+    drawWorkoutHistory();
+  } catch(e){
+    $('wkBody').innerHTML = '<div class="empty">' + esc(String((e && e.message) || e)) + '</div>';
+  }
+}
+
+function drawMyWorkouts(){
+  const counts = {};
+  DAY_KEYS.forEach(k => { counts[k] = wkPlan[k].length; });
+  renderDayTabs($('wkDays'), wkDay, counts, d => { wkDay = d; drawMyWorkouts(); });
+
+  const key = DAY_KEYS[wkDay];
+  const list = wkPlan[key];
+  const isToday = wkDay === new Date().getDay();
+
+  if (!list.length){
+    $('wkBody').innerHTML = '<div class="empty">יום מנוחה. אין תרגילים ליום ' +
+      DAY_HE[wkDay] + '.</div>';
+    return;
+  }
+
+  /* סימון אפשרי רק ביום הנוכחי — אחרת זה דיווח למפרע */
+  $('wkBody').innerHTML =
+    list.map(x =>
+      '<label class="ex">' +
+      (isToday ? '<input type="checkbox" data-ex="' + esc(x.n) + '"' +
+                 (wkDone.indexOf(x.n) > -1 ? ' checked' : '') + '>' : '<div class="num">•</div>') +
+      '<div class="info"><b>' + esc(x.n) + '</b><span>' + esc(exLine(x)) + '</span></div></label>'
+    ).join('') +
+    (isToday
+      ? '<div class="donebar"><div class="track"><i id="wkBar" style="background:var(--state);width:' +
+        Math.round(list.filter(x => wkDone.indexOf(x.n) > -1).length / list.length * 100) +
+        '%"></i></div><span style="font-size:var(--t-micro);color:var(--mut)" id="wkCount">' +
+        list.filter(x => wkDone.indexOf(x.n) > -1).length + ' / ' + list.length + '</span></div>'
+      : '<div class="empty" style="margin-top:12px">סימון ביצוע אפשרי ביום עצמו.</div>');
+}
+
+$('wkBody').addEventListener('change', async e => {
+  const cb = e.target.closest('[data-ex]'); if (!cb || !myLink) return;
+  const name = cb.dataset.ex;
+  if (cb.checked){ if (wkDone.indexOf(name) === -1) wkDone.push(name); }
+  else wkDone = wkDone.filter(n => n !== name);
+
+  const list = wkPlan[DAY_KEYS[new Date().getDay()]];
+  const all = list.length > 0 && list.every(x => wkDone.indexOf(x.n) > -1);
+  const bar = $('wkBar'), cnt = $('wkCount');
+  if (bar) bar.style.width = Math.round(wkDone.length / list.length * 100) + '%';
+  if (cnt) cnt.textContent = wkDone.length + ' / ' + list.length;
+
+  try {
+    await Cloud.setWorkoutLog(myLink.id, todayKey(), wkDone, all);
+    if (all) toast('כל הכבוד, סיימת את האימון של היום');
+    drawWorkoutHistory();
+  } catch(err){
+    toast(String((err && err.message) || err));
+    cb.checked = !cb.checked;
+  }
+});
+
+async function drawWorkoutHistory(){
+  if (!myLink){ $('wkHistory').innerHTML = ''; return; }
+  const from = new Date(); from.setDate(from.getDate() - 6);
+  let rows = [];
+  try { rows = await Cloud.recentWorkoutLogs(myLink.id, todayKey(from)); } catch(e){}
+  const byDate = {};
+  rows.forEach(r => { byDate[r.log_date] = r; });
+
+  const cells = [];
+  for (let i = 6; i >= 0; i--){
+    const d = new Date(); d.setDate(d.getDate() - i);
+    const k = todayKey(d), r = byDate[k];
+    const planned = wkPlan ? wkPlan[DAY_KEYS[d.getDay()]].length : 0;
+    const ok = r && r.completed;
+    cells.push('<div><i class="' + (ok ? 'ok' : '') + '" title="' + k + '"></i>' +
+               '<span>' + DAY_SHORT[d.getDay()] + '</span></div>');
+    void planned;
+  }
+  $('wkHistory').innerHTML = '<div class="hist">' + cells.join('') + '</div>';
 }
 
 /* ---------- toast ---------- */

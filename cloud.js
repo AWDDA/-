@@ -289,6 +289,60 @@ const Cloud = (() => {
     return map;
   }
 
+  /* ---------- תוכניות אימון ---------- */
+  async function getPlan(linkId){
+    const r = await rest('workout_plans?link_id=eq.' + linkId + '&select=plan,updated_at');
+    return (r && r[0]) || null;
+  }
+
+  async function savePlan(linkId, traineeId, plan){
+    const body = JSON.stringify({plan, updated_at: new Date().toISOString()});
+    const exists = await rest('workout_plans?link_id=eq.' + linkId + '&select=link_id');
+    if (exists && exists.length){
+      await rest('workout_plans?link_id=eq.' + linkId, {
+        method: 'PATCH', headers: {Prefer: 'return=minimal'}, body
+      });
+      return;
+    }
+    await rest('workout_plans', {
+      method: 'POST', headers: {Prefer: 'return=minimal'},
+      body: JSON.stringify({
+        link_id: linkId, coach_id: user().id, trainee_id: traineeId,
+        plan, updated_at: new Date().toISOString()
+      })
+    });
+  }
+
+  /* ---------- ביצוע אימונים ---------- */
+  async function getWorkoutLog(linkId, date){
+    const r = await rest('workout_logs?link_id=eq.' + linkId +
+                         '&log_date=eq.' + date + '&select=id,done,completed');
+    return (r && r[0]) || null;
+  }
+
+  async function recentWorkoutLogs(linkId, sinceDate){
+    return (await rest('workout_logs?link_id=eq.' + linkId +
+                       '&log_date=gte.' + sinceDate +
+                       '&select=log_date,done,completed&order=log_date.desc')) || [];
+  }
+
+  async function setWorkoutLog(linkId, date, done, completed){
+    const existing = await getWorkoutLog(linkId, date);
+    const payload = {done, completed: !!completed, updated_at: new Date().toISOString()};
+    if (existing){
+      await rest('workout_logs?id=eq.' + existing.id, {
+        method: 'PATCH', headers: {Prefer: 'return=minimal'}, body: JSON.stringify(payload)
+      });
+      return;
+    }
+    await rest('workout_logs', {
+      method: 'POST', headers: {Prefer: 'return=minimal'},
+      body: JSON.stringify(Object.assign({
+        link_id: linkId, trainee_id: user().id, log_date: date
+      }, payload))
+    });
+  }
+
   /* ---------- אחסון תמונות ---------- */
   async function storage(path, opts){
     if (!signedIn()) throw new Error('לא מחובר');
@@ -371,6 +425,7 @@ const Cloud = (() => {
     coachLinks, traineeLinks, requestLink, setLinkStatus,
     profilesByIds, pullFor, messages, sendMessage, setRole, diagnose,
     uploadImage, imageUrl,
+    getPlan, savePlan, getWorkoutLog, setWorkoutLog, recentWorkoutLogs,
     pending: () => Object.keys(queue).length,
     lastSync: () => LS.get('maazan:sb:lastsync'),
     onChange: fn => listeners.push(fn)
