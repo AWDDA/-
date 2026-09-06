@@ -489,15 +489,6 @@ option{background:#1B1F2B;color:var(--text)}
             <input id="acctMail" type="email" autocomplete="email" placeholder="you@example.com"></div>
           <div class="field wide"><label for="acctPass">סיסמה</label>
             <input id="acctPass" type="password" autocomplete="current-password" placeholder="לפחות 6 תווים"></div>
-          <div class="field wide" id="acctIdentity" hidden>
-            <label>סוג החשבון</label>
-            <div class="seg" id="acctRole">
-              <button type="button" data-v="trainee" aria-pressed="true">מתאמן</button>
-              <button type="button" data-v="coach" aria-pressed="false">מאמן</button>
-            </div>
-          </div>
-          <div class="field wide" id="acctUserRow" hidden><label for="acctUser">שם משתמש</label>
-            <input id="acctUser" autocomplete="username" placeholder="באנגלית, בלי רווחים"></div>
           <div class="field wide" id="acctPass2Row" hidden><label for="acctPass2">אימות סיסמה</label>
             <input id="acctPass2" type="password" autocomplete="new-password" placeholder="הקלד שוב את אותה סיסמה"></div>
           <div class="field wide"><button class="btn" id="btnAuth">כניסה</button></div>
@@ -674,24 +665,12 @@ option{background:#1B1F2B;color:var(--text)}
 
 <div class="onb" id="onb" hidden>
   <div class="sheetcard">
-    <div class="steps"><i class="on" id="stp1"></i><i id="stp2"></i></div>
+    <div class="steps"><i class="on" id="stp1"></i><i id="stp2"></i><i id="stp3"></i></div>
 
     <div id="obAccount">
       <div class="mark" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M4 8v8M20 8v8M7 6v12M17 6v12M7 12h10"/></svg></div>
       <h2 id="obTitle">ברוך הבא למאזן</h2>
       <p class="lead" id="obLead">פתח חשבון כדי שהיומן שלך יישמר ויעבור איתך בין הטלפון למחשב.</p>
-      <div class="form" id="obIdentity">
-        <div class="field wide"><label>סוג החשבון</label>
-          <div class="seg" id="obRole">
-            <button type="button" data-v="trainee" aria-pressed="true">מתאמן</button>
-            <button type="button" data-v="coach" aria-pressed="false">מאמן</button>
-          </div>
-        </div>
-        <div class="field wide"><label for="obUser">שם משתמש</label>
-          <input id="obUser" autocomplete="username" placeholder="באנגלית, בלי רווחים" inputmode="latin"></div>
-        <div class="field wide"><label for="obName">שם לתצוגה</label>
-          <input id="obName" autocomplete="name" placeholder="איך שיציג אותך המאמן"></div>
-      </div>
       <div class="form">
         <div class="field wide"><label for="obMail">אימייל</label>
           <input id="obMail" type="email" autocomplete="email" placeholder="you@example.com"></div>
@@ -703,6 +682,24 @@ option{background:#1B1F2B;color:var(--text)}
       <button class="btn" id="obGo">יצירת חשבון</button>
       <button class="alt" id="obToggle">כבר יש לי חשבון — כניסה</button>
       <button class="skip" id="obSkip">המשך בלי חשבון (הנתונים יישמרו במכשיר הזה בלבד)</button>
+    </div>
+
+    <div id="obIdent" hidden>
+      <h2>איך יקראו לך באפליקציה</h2>
+      <p class="lead">שם המשתמש הוא מה שמאמן מחפש לפיו. אפשר לשנות אחר כך.</p>
+      <div class="form">
+        <div class="field wide"><label>סוג החשבון</label>
+          <div class="seg" id="obRole">
+            <button type="button" data-v="trainee" aria-pressed="true">מתאמן</button>
+            <button type="button" data-v="coach" aria-pressed="false">מאמן</button>
+          </div>
+        </div>
+        <div class="field wide"><label for="obUser">שם משתמש</label>
+          <input id="obUser" autocomplete="username" placeholder="באנגלית, בלי רווחים"></div>
+        <div class="field wide"><label for="obName">שם לתצוגה</label>
+          <input id="obName" autocomplete="name" placeholder="איך שיציג אותך המאמן"></div>
+      </div>
+      <button class="btn" id="obIdentGo">המשך</button>
     </div>
 
     <div id="obDetails" hidden>

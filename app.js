@@ -1101,8 +1101,6 @@ function acctSetMode(m){
   acctMode = m;
   const up = m === 'up';
   $('acctPass2Row').hidden  = !up;
-  $('acctUserRow').hidden   = !up;
-  $('acctIdentity').hidden  = !up;
   $('btnAuth').textContent  = up ? 'יצירת חשבון' : 'כניסה';
   $('btnAuthToggle').textContent = up ? 'כבר יש לי חשבון — כניסה' : 'אין לי חשבון — הרשמה';
   $('acctPass').setAttribute('autocomplete', up ? 'new-password' : 'current-password');
@@ -1116,19 +1114,12 @@ async function doAuth(mode){
   const email = $('acctMail').value.trim(), pass = $('acctPass').value, pass2 = $('acctPass2').value;
   const err = checkCredentials(mode, email, pass, pass2);
   if (err){ toast(err); return; }
-  const uname = $('acctUser').value.trim();
-  if (mode === 'up'){
-    const uerr = checkUsername(uname);
-    if (uerr){ toast(uerr); return; }
-  }
   const btn = $('btnAuth'), label = btn.textContent;
   btn.textContent = 'רגע…'; btn.disabled = true;
   try {
     if (mode === 'up'){
-      if (await Cloud.usernameTaken(uname)){ toast('שם המשתמש כבר תפוס'); return; }
       const r = await Cloud.signUp(email, pass);
       if (r.needsConfirm){ toast('נשלח אליך מייל אישור — אשר אותו ואז התחבר'); acctSetMode('in'); return; }
-      await Cloud.saveProfile({username: uname, display_name: uname, role: segValue('acctRole')});
     } else {
       await Cloud.signIn(email, pass);
     }
@@ -1137,6 +1128,7 @@ async function doAuth(mode){
     await reloadEverything();
     renderAccount();
     await loadMe();
+    if (!state.me){ promptIdentity(); return; }
     toast('מחובר · הנתונים סונכרנו');
   } catch(e){
     toast(authError(e));
@@ -1180,9 +1172,11 @@ let obMode = 'up';   // up = הרשמה, in = כניסה
 
 function obStep(n){
   $('obAccount').hidden = (n !== 1);
-  $('obDetails').hidden = (n !== 2);
+  $('obIdent').hidden   = (n !== 2);
+  $('obDetails').hidden = (n !== 3);
   $('stp1').classList.toggle('on', n >= 1);
   $('stp2').classList.toggle('on', n >= 2);
+  $('stp3').classList.toggle('on', n >= 3);
 }
 function obSetMode(m){
   obMode = m;
@@ -1195,7 +1189,6 @@ function obSetMode(m){
   $('obToggle').textContent = up ? 'כבר יש לי חשבון — כניסה' : 'אין לי חשבון — הרשמה';
   $('obPass').setAttribute('autocomplete', up ? 'new-password' : 'current-password');
   $('obPass2Row').hidden = !up;
-  $('obIdentity').hidden = !up;
   if (!up) $('obPass2').value = '';
 }
 $('obToggle').addEventListener('click', () => obSetMode(obMode === 'up' ? 'in' : 'up'));
@@ -1212,19 +1205,14 @@ $('obGo').addEventListener('click', async () => {
   const email = $('obMail').value.trim(), pass = $('obPass').value, pass2 = $('obPass2').value;
   const err = checkCredentials(obMode, email, pass, pass2);
   if (err){ toast(err); return; }
-  const uname = $('obUser').value.trim();
-  if (obMode === 'up'){
-    const uerr = checkUsername(uname);
-    if (uerr){ toast(uerr); return; }
-  }
   const btn = $('obGo'), label = btn.textContent;
   btn.textContent = 'רגע…'; btn.disabled = true;
   try {
     if (obMode === 'up'){
-      if (await Cloud.usernameTaken(uname)){ toast('שם המשתמש כבר תפוס'); return; }
       const r = await Cloud.signUp(email, pass);
+      /* אישור מייל מופעל: אין עדיין סשן, אז אי אפשר ליצור פרופיל.
+         הוא ייווצר בכניסה הראשונה, כשהשלב הזה יופיע שוב. */
       if (r.needsConfirm){ toast('נשלח אליך מייל אישור — אשר אותו וחזור לכאן'); obSetMode('in'); return; }
-      await Cloud.saveProfile({username: uname, display_name: $('obName').value, role: segValue('obRole')});
     } else {
       await Cloud.signIn(email, pass);
     }
@@ -1233,10 +1221,14 @@ $('obGo').addEventListener('click', async () => {
     await reloadEverything();
     renderAccount();
     await loadMe();
+
+    /* עכשיו יש סשן, ורק עכשיו אפשר לגעת במסד. */
+    if (!state.me){ obStep(2); $('obUser').focus(); return; }
+
     /* משתמש חוזר שכבר יש לו פרופיל בענן — אין טעם לשאול אותו שוב */
     const existing = await Store.get('maazan:profile');
     if (existing){ obFinishNow(); toast('מחובר · הנתונים שוחזרו'); }
-    else { obPrefill(); obStep(2); }
+    else { obPrefill(); obStep(3); }
   } catch(e){
     toast(authError(e));
   } finally {
@@ -1244,7 +1236,43 @@ $('obGo').addEventListener('click', async () => {
   }
 });
 
-$('obSkip').addEventListener('click', () => { obPrefill(); obStep(2); });
+$('obSkip').addEventListener('click', () => { obPrefill(); obStep(3); });
+
+/* בקשת זהות בפני עצמה — למשתמש שיש לו חשבון אבל עוד אין לו שם משתמש */
+function promptIdentity(){
+  obStep(2);
+  $('onb').hidden = false;
+  $('obUser').focus();
+}
+
+$('obIdentGo').addEventListener('click', async () => {
+  const uname = $('obUser').value.trim();
+  const err = checkUsername(uname);
+  if (err){ toast(err); return; }
+  if (!Cloud.signedIn()){ toast('צריך להתחבר קודם'); obStep(1); return; }
+
+  const btn = $('obIdentGo'), label = btn.textContent;
+  btn.textContent = 'רגע…'; btn.disabled = true;
+  try {
+    if (await Cloud.usernameTaken(uname)){ toast('שם המשתמש כבר תפוס, נסה אחר'); return; }
+    await Cloud.saveProfile({
+      username: uname,
+      display_name: $('obName').value,
+      role: segValue('obRole')
+    });
+    await loadMe();
+    if (onbDone()){ obFinishNow(); toast('שם המשתמש נשמר'); return; }
+    const existing = await Store.get('maazan:profile');
+    if (existing){ obFinishNow(); }
+    else { obPrefill(); obStep(3); }
+  } catch(e){
+    /* המפתח הייחודי במסד הוא ההגנה האמיתית מפני כפילות */
+    const m = String((e && e.message) || e);
+    toast(/409|duplicate/.test(m) ? 'שם המשתמש כבר תפוס, נסה אחר' : 'השמירה נכשלה');
+  } finally {
+    btn.textContent = label; btn.disabled = false;
+  }
+});
 
 function obPrefill(){
   const P = state.profile;
@@ -1281,6 +1309,10 @@ function obFinishNow(){
 }
 
 function maybeOnboard(){
+  if (Cloud.signedIn() && Cloud.ready()){
+    /* מחובר אבל בלי שם משתמש — למשל אחרי אישור מייל */
+    Cloud.myProfile().then(p => { if (!p) promptIdentity(); }).catch(() => {});
+  }
   if (onbDone() || Cloud.signedIn()) return;
   obSetMode('up');
   obStep(1);
@@ -1318,7 +1350,7 @@ function bindSeg(id){
     [...e.currentTarget.children].forEach(x => x.setAttribute('aria-pressed', String(x === b)));
   });
 }
-bindSeg('obRole'); bindSeg('acctRole');
+bindSeg('obRole');
 
 async function loadMe(){
   state.me = null;
