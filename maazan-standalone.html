@@ -588,7 +588,7 @@ option{background:#1B1F2B;color:var(--text)}
         <div id="reqList"></div>
       </div>
 
-      <p class="legalnote">המספרים הם הערכה סטטיסטית ואינם ייעוץ תזונתי.<br>בלי חשבון הנתונים נשמרים במכשיר הזה בלבד.</p>
+      <p class="legalnote"><span id="appVer">גרסה —</span><br>המספרים הם הערכה סטטיסטית ואינם ייעוץ תזונתי.<br>בלי חשבון הנתונים נשמרים במכשיר הזה בלבד.</p>
     </section>
     <!-- ============ COACH ============ -->
     <section class="screen" id="scr-coach" hidden>
@@ -599,7 +599,10 @@ option{background:#1B1F2B;color:var(--text)}
       </div>
 
       <div class="block">
-        <div class="bhead"><h2>המתאמנים שלי</h2><span id="coachStatus"></span></div>
+        <div class="bhead"><h2>המתאמנים שלי</h2>
+          <a id="coachRefresh">רענון</a></div>
+        <div style="color:var(--mut);font-size:var(--t-micro);margin:-8px 0 10px"
+             id="coachStatus"></div>
         <div id="coachList"></div>
       </div>
 
@@ -2440,6 +2443,7 @@ function maybeOnboard(){
    שורות של מתאמן רק כשקיים קישור מאושר. הקוד כאן הוא הממשק,
    לא ההגנה — ביטול אישור סוגר את הגישה גם אם הקוד לא ידע על כך.
    ============================================================ */
+const APP_VERSION = 15;
 const USERNAME_RE = /^[a-z0-9._-]{3,20}$/i;
 let coachTimer = null;
 
@@ -2533,20 +2537,25 @@ async function runSearch(term){
   let rows = [];
   try { rows = await Cloud.searchUsers(term); }
   catch(e){ $('coachResults').innerHTML = '<li class="empty">החיפוש נכשל</li>'; return; }
+
+  /* מושכים את הקישורים מחדש ולא מסתמכים על state.links.
+     רשימה ישנה בזיכרון היא בדיוק מה שגרם ל«כבר ברשימה» מול רשימה ריקה. */
+  try { state.links = await Cloud.coachLinks(); } catch(e){}
+
   /* רק קישור חי חוסם בקשה חדשה. מבוטל או שנדחה — אפשר לבקש שוב. */
-  const ACTIVE = ['pending', 'approved'];
-  const linked = new Set(state.links.filter(l => ACTIVE.indexOf(l.status) > -1)
-                                    .map(l => l.trainee_id));
-  const past = new Set(state.links.filter(l => ACTIVE.indexOf(l.status) === -1)
-                                  .map(l => l.trainee_id));
+  const status = {};
+  state.links.forEach(l => { status[l.trainee_id] = l.status; });
   $('coachResults').innerHTML = rows.length
-    ? rows.map(p =>
-        '<li><div class="nm"><b>' + esc(personLabel(p)) + '</b><span>@' + esc(p.username) + '</span></div>' +
-        (linked.has(p.user_id)
-          ? '<span class="tag">כבר ברשימה</span>'
-          : '<button class="mini go" data-add="' + p.user_id + '">' +
-            (past.has(p.user_id) ? 'בקשה חוזרת' : 'בקשת גישה') + '</button>') +
-        '</li>').join('')
+    ? rows.map(p => {
+        const st = status[p.user_id];
+        let right;
+        if (st === 'approved')     right = '<span class="tag ok">ברשימה שלך</span>';
+        else if (st === 'pending') right = '<span class="tag wait">ממתין לאישור</span>';
+        else right = '<button class="mini go" data-add="' + p.user_id + '">' +
+                     (st ? 'בקשה חוזרת' : 'בקשת גישה') + '</button>';
+        return '<li><div class="nm"><b>' + esc(personLabel(p)) + '</b><span>@' +
+               esc(p.username) + '</span></div>' + right + '</li>';
+      }).join('')
     : '<li class="empty">לא נמצא מתאמן בשם הזה</li>';
 }
 
@@ -2585,6 +2594,8 @@ async function refreshCoach(){
       }).join('')
     : '<div class="empty">עוד לא הוספת מתאמנים. חפש למעלה לפי שם משתמש.</div>';
 }
+
+$('coachRefresh').addEventListener('click', () => { refreshCoach(); toast('הרשימה רועננה'); });
 
 $('coachList').addEventListener('click', e => {
   const ch = e.target.closest('[data-chat]');
@@ -2781,6 +2792,10 @@ window.addEventListener('appinstalled', () => { $('installBtn').hidden = true; }
   goto('home');
   maybeOnboard();
   loadMe();
+
+  const ver = $('appVer');
+  if (ver) ver.textContent = 'גרסה ' + APP_VERSION;
+  console.log('מאזן — גרסה', APP_VERSION);
   if ('serviceWorker' in navigator && location.protocol.indexOf('http') === 0) {
     navigator.serviceWorker.register('./sw.js').catch(() => {});
   }
