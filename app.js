@@ -1239,7 +1239,10 @@ $('obGo').addEventListener('click', async () => {
 $('obSkip').addEventListener('click', () => { obPrefill(); obStep(3); });
 
 /* בקשת זהות בפני עצמה — למשתמש שיש לו חשבון אבל עוד אין לו שם משתמש */
+let obFlow = 'full';   // 'full' = הרשמה מלאה, 'identity' = רק שם משתמש
+
 function promptIdentity(){
+  obFlow = 'identity';
   obStep(2);
   $('onb').hidden = false;
   $('obUser').focus();
@@ -1249,6 +1252,7 @@ $('obIdentGo').addEventListener('click', async () => {
   const uname = $('obUser').value.trim();
   const err = checkUsername(uname);
   if (err){ toast(err); return; }
+  if (!Cloud.ready()){ obPrefill(); obStep(3); return; }
   if (!Cloud.signedIn()){ toast('צריך להתחבר קודם'); obStep(1); return; }
 
   const btn = $('obIdentGo'), label = btn.textContent;
@@ -1261,14 +1265,21 @@ $('obIdentGo').addEventListener('click', async () => {
       role: segValue('obRole')
     });
     await loadMe();
-    if (onbDone()){ obFinishNow(); toast('שם המשתמש נשמר'); return; }
+    /* אם נכנסנו רק בשביל שם משתמש, או שכבר יש פרטים אישיים —
+       אין מה להמשיך, סוגרים. */
     const existing = await Store.get('maazan:profile');
-    if (existing){ obFinishNow(); }
-    else { obPrefill(); obStep(3); }
+    if (obFlow === 'identity' || onbDone() || existing){
+      obFinishNow();
+      renderAll();
+      toast('שם המשתמש נשמר');
+      return;
+    }
+    obPrefill(); obStep(3);
   } catch(e){
     /* המפתח הייחודי במסד הוא ההגנה האמיתית מפני כפילות */
     const m = String((e && e.message) || e);
-    toast(/409|duplicate/.test(m) ? 'שם המשתמש כבר תפוס, נסה אחר' : 'השמירה נכשלה');
+    console.error('identity save failed:', e);
+    toast(/409|duplicate|unique/i.test(m) ? 'שם המשתמש כבר תפוס, נסה אחר' : m);
   } finally {
     btn.textContent = label; btn.disabled = false;
   }
@@ -1309,6 +1320,7 @@ function obFinishNow(){
 }
 
 function maybeOnboard(){
+  obFlow = 'full';
   if (Cloud.signedIn() && Cloud.ready()){
     /* מחובר אבל בלי שם משתמש — למשל אחרי אישור מייל */
     Cloud.myProfile().then(p => { if (!p) promptIdentity(); }).catch(() => {});
@@ -1317,9 +1329,8 @@ function maybeOnboard(){
   obSetMode('up');
   obStep(1);
   if (!Cloud.ready()){
-    /* בלי הגדרת שרת אין למה להירשם — מדלגים ישר לפרטים */
-    $('obAccount').hidden = true;
-    obPrefill(); obStep(2);
+    /* בלי שרת אין חשבון ואין שם משתמש — ישר לפרטים האישיים */
+    obPrefill(); obStep(3);
   }
   $('onb').hidden = false;
 }
@@ -1390,7 +1401,8 @@ async function refreshRequests(){
       const act = l.status === 'pending'
         ? '<button class="mini go" data-ok="'+l.id+'">אישור</button>' +
           '<button class="mini no" data-no="'+l.id+'">דחייה</button>'
-        : '<button class="mini no" data-no="'+l.id+'">ביטול גישה</button>';
+        : '<button class="mini go" data-chat="'+l.id+'" data-name="'+esc(personLabel(p))+'">צ׳אט</button>' +
+          '<button class="mini no" data-no="'+l.id+'">ביטול גישה</button>';
       return '<div class="person"><div class="who"><b>' + esc(personLabel(p)) + '</b>' +
              '<span>' + (l.status === 'pending' ? 'מבקש לצפות ביומן שלך' : 'צופה ביומן שלך') +
              '</span></div><div class="act">' + act + '</div></div>';
@@ -1399,6 +1411,8 @@ async function refreshRequests(){
 }
 
 $('reqList').addEventListener('click', async e => {
+  const ch = e.target.closest('[data-chat]');
+  if (ch){ openChat(ch.dataset.chat, ch.dataset.name); return; }
   const ok = e.target.closest('[data-ok]'), no = e.target.closest('[data-no]');
   if (!ok && !no) return;
   try {
@@ -1454,7 +1468,8 @@ async function refreshCoach(){
     ? live.map(l => {
         const p = state.names[l.trainee_id];
         const right = l.status === 'approved'
-          ? '<button class="mini go" data-view="' + l.trainee_id + '">צפייה</button>'
+          ? '<button class="mini go" data-view="' + l.trainee_id + '">צפייה</button>' +
+            '<button class="mini" data-chat="' + l.id + '" data-name="' + esc(personLabel(p)) + '">צ׳אט</button>'
           : '<span class="tag wait">ממתין לאישור</span>';
         return '<div class="person"><div class="who"><b>' + esc(personLabel(p)) + '</b>' +
                '<span>@' + esc(p ? p.username : '') + '</span></div>' +
@@ -1464,6 +1479,8 @@ async function refreshCoach(){
 }
 
 $('coachList').addEventListener('click', e => {
+  const ch = e.target.closest('[data-chat]');
+  if (ch){ openChat(ch.dataset.chat, ch.dataset.name); return; }
   const b = e.target.closest('[data-view]'); if (b) openLive(b.dataset.view);
 });
 
@@ -1479,6 +1496,9 @@ async function openLive(traineeId){
   state.live = traineeId;
   const p = state.names[traineeId];
   $('liveName').textContent = personLabel(p);
+  const link = state.links.find(l => l.trainee_id === traineeId && l.status === 'approved');
+  $('liveChat').hidden = !link;
+  $('liveChat').onclick = () => openChat(link && link.id, personLabel(p));
   $('liveBlock').hidden = false;
   $('liveBody').innerHTML = '<div class="empty"><i class="spin"></i>טוען…</div>';
   await drawLive();
@@ -1534,6 +1554,82 @@ async function drawLive(){
     (updated ? '<div class="empty" style="margin-top:12px">עודכן לאחרונה ' +
       new Date(updated).toLocaleTimeString('he-IL',{hour:'2-digit',minute:'2-digit'}) + '</div>' : '');
 }
+
+
+/* ---------- צ׳אט מאמן ומתאמן ---------- */
+let chatTimer = null, chatSince = null, chatLink = null;
+
+function openChat(linkId, withName){
+  if (!linkId){ toast('אין קישור פעיל'); return; }
+  chatLink = linkId; chatSince = null;
+  $('chatWith').textContent = withName || 'שיחה';
+  $('chatLog').innerHTML = '<div class="chatempty"><i class="spin"></i>טוען…</div>';
+  $('chatPanel').hidden = false;
+  document.body.style.overflow = 'hidden';
+  loadChat(true);
+  if (chatTimer) clearInterval(chatTimer);
+  chatTimer = setInterval(() => { if (chatLink) loadChat(false); }, 5000);
+  setTimeout(() => $('chatInput').focus(), 120);
+}
+
+function closeChat(){
+  chatLink = null;
+  if (chatTimer){ clearInterval(chatTimer); chatTimer = null; }
+  $('chatPanel').hidden = true;
+  document.body.style.overflow = '';
+}
+$('chatClose').addEventListener('click', closeChat);
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape' && !$('chatPanel').hidden) closeChat();
+});
+
+function chatBubble(m, mine){
+  const t = new Date(m.created_at).toLocaleTimeString('he-IL', {hour:'2-digit', minute:'2-digit'});
+  return '<div class="msg ' + (mine ? 'me' : 'them') + '">' + esc(m.body) +
+         '<time>' + t + '</time></div>';
+}
+
+async function loadChat(full){
+  const id = chatLink;
+  let rows;
+  try { rows = await Cloud.messages(id, full ? null : chatSince); }
+  catch(e){
+    if (full) $('chatLog').innerHTML = '<div class="chatempty">טעינת השיחה נכשלה.</div>';
+    return;
+  }
+  if (chatLink !== id) return;
+
+  const me = Cloud.user() ? Cloud.user().id : null;
+  const log = $('chatLog');
+  if (full){
+    log.innerHTML = rows.length
+      ? rows.map(m => chatBubble(m, m.sender_id === me)).join('')
+      : '<div class="chatempty">אין עדיין הודעות.<br>כתוב משהו כדי להתחיל.</div>';
+  } else if (rows.length){
+    const empty = log.querySelector('.chatempty');
+    if (empty) log.innerHTML = '';
+    log.insertAdjacentHTML('beforeend', rows.map(m => chatBubble(m, m.sender_id === me)).join(''));
+  }
+  if (rows.length) chatSince = rows[rows.length - 1].created_at;
+  if (full || rows.length) log.scrollTop = log.scrollHeight;
+}
+
+async function sendChat(){
+  const input = $('chatInput');
+  const body = input.value.trim();
+  if (!body || !chatLink) return;
+  input.value = '';
+  try {
+    await Cloud.sendMessage(chatLink, body);
+    await loadChat(false);
+  } catch(e){
+    input.value = body;
+    const m = String((e && e.message) || e);
+    toast(/403|policy/i.test(m) ? 'אין הרשאה לשלוח — ייתכן שהגישה בוטלה' : m);
+  }
+}
+$('chatSend').addEventListener('click', sendChat);
+$('chatInput').addEventListener('keydown', e => { if (e.key === 'Enter') sendChat(); });
 
 /* ---------- toast ---------- */
 let toastT;

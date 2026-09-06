@@ -46,8 +46,10 @@ alter table public.profiles enable row level security;
 -- בכל אפליקציה שבה מוסיפים מישהו לפי שם. היא חושפת שם משתמש,
 -- שם תצוגה ותפקיד — ולא שום נתון תזונתי.
 drop policy if exists "directory is readable" on public.profiles;
+-- auth.role() מיושנת ועלולה לא להתקיים בפרויקטים חדשים.
+-- auth.uid() קיימת תמיד ומחזירה null למשתמש אנונימי.
 create policy "directory is readable" on public.profiles
-  for select using (auth.role() = 'authenticated');
+  for select using (auth.uid() is not null);
 
 drop policy if exists "write own profile" on public.profiles;
 create policy "write own profile" on public.profiles
@@ -115,4 +117,40 @@ create policy "approved coach reads trainee" on public.app_data
             where l.trainee_id = public.app_data.user_id
               and l.coach_id   = auth.uid()
               and l.status     = 'approved')
+  );
+
+-- ============================================================
+-- 5. הודעות בין מאמן למתאמן
+-- ============================================================
+create table if not exists public.messages (
+  id         uuid primary key default gen_random_uuid(),
+  link_id    uuid not null references public.coach_links(id) on delete cascade,
+  sender_id  uuid not null references auth.users on delete cascade,
+  body       text not null check (char_length(body) between 1 and 2000),
+  created_at timestamptz not null default now()
+);
+
+create index if not exists messages_link_idx on public.messages (link_id, created_at);
+
+alter table public.messages enable row level security;
+
+-- קריאה: רק שני הצדדים של אותו קישור. נשמרת גם אחרי ביטול גישה,
+-- כדי שהיסטוריית שיחה לא תיעלם בלי שאיש ביקש.
+drop policy if exists "link members read messages" on public.messages;
+create policy "link members read messages" on public.messages
+  for select using (
+    exists (select 1 from public.coach_links l
+            where l.id = public.messages.link_id
+              and (l.coach_id = auth.uid() or l.trainee_id = auth.uid()))
+  );
+
+-- כתיבה: רק בשמך, ורק כל עוד הקישור מאושר.
+drop policy if exists "link members send messages" on public.messages;
+create policy "link members send messages" on public.messages
+  for insert with check (
+    sender_id = auth.uid()
+    and exists (select 1 from public.coach_links l
+                where l.id = public.messages.link_id
+                  and l.status = 'approved'
+                  and (l.coach_id = auth.uid() or l.trainee_id = auth.uid()))
   );

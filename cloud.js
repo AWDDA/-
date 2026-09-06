@@ -23,7 +23,6 @@
 const SUPABASE_URL      = 'https://awkmwxthzypjelbceoex.supabase.co';
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImF3a213eHRoenlwamVsYmNlb2V4Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODg0MzEyNjAsImV4cCI6MjEwNDAwNzI2MH0.uO2C5VTKaEat1Dp-plR68qrNMtRuUZwRAYag2mOccTw';
 
-
 const Cloud = (() => {
   const LS = {
     get(k){ try { return localStorage.getItem(k); } catch(e){ return null; } },
@@ -97,11 +96,24 @@ const Cloud = (() => {
     return store(await authCall('token?grant_type=refresh_token', {refresh_token: session.refresh_token}));
   }
 
+  /* בקשה שלא חוזרת היא באג שנראה למשתמש ככפתור תקוע.
+     כל קריאה מוגבלת בזמן ונכשלת בקול. */
+  async function withTimeout(url, init, ms){
+    const ctrl = typeof AbortController !== 'undefined' ? new AbortController() : null;
+    const t = setTimeout(() => { try { ctrl && ctrl.abort(); } catch(e){} }, ms || 15000);
+    try {
+      return await fetch(url, ctrl ? Object.assign({}, init, {signal: ctrl.signal}) : init);
+    } catch(e){
+      if (e && e.name === 'AbortError') throw new Error('השרת לא הגיב');
+      throw e;
+    } finally { clearTimeout(t); }
+  }
+
   async function rest(path, opts, retry){
     if (!signedIn()) throw new Error('לא מחובר');
     if (session.expires_at && Date.now() > session.expires_at) await refresh();
     const o = opts || {};
-    const r = await fetch(cfg.url + '/rest/v1/' + path, {
+    const r = await withTimeout(cfg.url + '/rest/v1/' + path, {
       method: o.method || 'GET',
       headers: Object.assign({
         apikey: cfg.key,
@@ -109,9 +121,13 @@ const Cloud = (() => {
         'Content-Type': 'application/json'
       }, o.headers || {}),
       body: o.body
-    });
+    }, 15000);
     if (r.status === 401 && !retry){ await refresh(); return rest(path, opts, true); }
-    if (!r.ok) throw new Error('שגיאת שרת ' + r.status);
+    if (!r.ok){
+      let detail = '';
+      try { const j = await r.json(); detail = j.message || j.error_description || j.hint || ''; } catch(e){}
+      throw new Error('שגיאת שרת ' + r.status + (detail ? ': ' + detail : ''));
+    }
     return r.status === 204 ? null : r.json();
   }
 
@@ -231,6 +247,22 @@ const Cloud = (() => {
     return map;
   }
 
+  /* ---------- הודעות ---------- */
+  async function messages(linkId, sinceIso){
+    let q = 'messages?link_id=eq.' + linkId +
+            '&select=id,sender_id,body,created_at&order=created_at.asc&limit=300';
+    if (sinceIso) q += '&created_at=gt.' + encodeURIComponent(sinceIso);
+    return (await rest(q)) || [];
+  }
+
+  async function sendMessage(linkId, body){
+    await rest('messages', {
+      method: 'POST',
+      headers: {Prefer: 'return=minimal'},
+      body: JSON.stringify({link_id: linkId, sender_id: user().id, body: String(body).trim()})
+    });
+  }
+
   /* קריאת הנתונים של מתאמן. מותרת רק כשקיים קישור מאושר —
      ה-RLS הוא שמחליט, לא הקוד הזה. */
   async function pullFor(userId){
@@ -243,7 +275,7 @@ const Cloud = (() => {
     signUp, signIn, signOut, pull, enqueue, flush,
     myProfile, saveProfile, usernameTaken, searchUsers,
     coachLinks, traineeLinks, requestLink, setLinkStatus,
-    profilesByIds, pullFor,
+    profilesByIds, pullFor, messages, sendMessage,
     pending: () => Object.keys(queue).length,
     lastSync: () => LS.get('maazan:sb:lastsync'),
     onChange: fn => listeners.push(fn)
