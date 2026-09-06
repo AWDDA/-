@@ -48,6 +48,9 @@ html[data-state="near"]{--state:#E5B36A}
 html[data-state="over"]{--state:#FF6B6B}
 
 *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+/* התכונה hidden חייבת לגבור על כל display מפורש. בלי זה, אלמנט
+   עם class="form" (display:grid) נשאר גלוי גם כשהקוד מסתיר אותו. */
+[hidden]{display:none!important}
 html,body{margin:0;padding:0;height:100%}
 body{background:var(--bg);color:var(--text);
   font-family:'Rubik','Heebo',system-ui,'Segoe UI',Arial,sans-serif;
@@ -2489,7 +2492,7 @@ function maybeOnboard(){
    שורות של מתאמן רק כשקיים קישור מאושר. הקוד כאן הוא הממשק,
    לא ההגנה — ביטול אישור סוגר את הגישה גם אם הקוד לא ידע על כך.
    ============================================================ */
-const APP_VERSION = 16;
+const APP_VERSION = 17;
 const USERNAME_RE = /^[a-z0-9._-]{3,20}$/i;
 let coachTimer = null;
 
@@ -2885,6 +2888,7 @@ window.addEventListener('appinstalled', () => { $('installBtn').hidden = true; }
   if (Cloud.signedIn()){ await syncFromCloud(); await reloadEverything(); renderAccount(); }
   await loadLog();
   renderAll();
+  renderAccount();
   goto('home');
   maybeOnboard();
   loadMe();

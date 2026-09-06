@@ -48,6 +48,9 @@ html[data-state="near"]{--state:#E5B36A}
 html[data-state="over"]{--state:#FF6B6B}
 
 *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+/* התכונה hidden חייבת לגבור על כל display מפורש. בלי זה, אלמנט
+   עם class="form" (display:grid) נשאר גלוי גם כשהקוד מסתיר אותו. */
+[hidden]{display:none!important}
 html,body{margin:0;padding:0;height:100%}
 body{background:var(--bg);color:var(--text);
   font-family:'Rubik','Heebo',system-ui,'Segoe UI',Arial,sans-serif;

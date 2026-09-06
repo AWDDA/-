@@ -1342,7 +1342,7 @@ function maybeOnboard(){
    שורות של מתאמן רק כשקיים קישור מאושר. הקוד כאן הוא הממשק,
    לא ההגנה — ביטול אישור סוגר את הגישה גם אם הקוד לא ידע על כך.
    ============================================================ */
-const APP_VERSION = 16;
+const APP_VERSION = 17;
 const USERNAME_RE = /^[a-z0-9._-]{3,20}$/i;
 let coachTimer = null;
 
@@ -1738,6 +1738,7 @@ window.addEventListener('appinstalled', () => { $('installBtn').hidden = true; }
   if (Cloud.signedIn()){ await syncFromCloud(); await reloadEverything(); renderAccount(); }
   await loadLog();
   renderAll();
+  renderAccount();
   goto('home');
   maybeOnboard();
   loadMe();
