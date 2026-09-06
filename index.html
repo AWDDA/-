@@ -504,6 +504,19 @@ option{background:#1B1F2B;color:var(--text)}
       <div class="block">
         <div class="bhead"><h2>חשבון וסנכרון</h2><span id="acctSync" style="font-size:12px;color:var(--mut)"></span></div>
 
+        <div class="form" id="roleRow" hidden>
+          <div class="field wide"><label>סוג החשבון</label>
+            <div class="seg" id="roleSeg">
+              <button type="button" data-v="trainee" aria-pressed="true">מתאמן</button>
+              <button type="button" data-v="coach" aria-pressed="false">מאמן</button>
+            </div>
+          </div>
+        </div>
+        <div class="btnrow" id="diagRow" hidden>
+          <button class="btn sec" id="diagBtn">בדיקת חיבור</button>
+          <pre id="diagOut" hidden style="white-space:pre-wrap;margin:12px 0 0;
+            font-size:var(--t-micro);color:var(--mut);line-height:1.8;font-family:inherit"></pre>
+        </div>
         <p class="note" id="acctOffline" hidden>החיבור לשרת לא הוגדר, אז האפליקציה עובדת מקומית בלבד.</p>
 
         <div class="form" id="acctOut" hidden>

@@ -504,6 +504,19 @@ option{background:#1B1F2B;color:var(--text)}
       <div class="block">
         <div class="bhead"><h2>חשבון וסנכרון</h2><span id="acctSync" style="font-size:12px;color:var(--mut)"></span></div>
 
+        <div class="form" id="roleRow" hidden>
+          <div class="field wide"><label>סוג החשבון</label>
+            <div class="seg" id="roleSeg">
+              <button type="button" data-v="trainee" aria-pressed="true">מתאמן</button>
+              <button type="button" data-v="coach" aria-pressed="false">מאמן</button>
+            </div>
+          </div>
+        </div>
+        <div class="btnrow" id="diagRow" hidden>
+          <button class="btn sec" id="diagBtn">בדיקת חיבור</button>
+          <pre id="diagOut" hidden style="white-space:pre-wrap;margin:12px 0 0;
+            font-size:var(--t-micro);color:var(--mut);line-height:1.8;font-family:inherit"></pre>
+        </div>
         <p class="note" id="acctOffline" hidden>החיבור לשרת לא הוגדר, אז האפליקציה עובדת מקומית בלבד.</p>
 
         <div class="form" id="acctOut" hidden>
@@ -1026,21 +1039,54 @@ const Cloud = (() => {
                        '&select=id,coach_id,status,requested_at&order=requested_at.desc')) || [];
   }
 
-  /* בקשה חוזרת אחרי ביטול: יש אילוץ ייחודיות על (coach_id, trainee_id),
-     אז INSERT רגיל ייכשל ב-409. on_conflict מפנה את PostgREST לאילוץ
-     הנכון, וההוספה הופכת לעדכון של השורה הקיימת בחזרה ל-pending. */
+  /* בקשה חוזרת אחרי ביטול. במקום upsert עם on_conflict — שדורש
+     שהאילוץ יהיה בדיוק בשם ובצורה שהשרת מצפה להם, ונכשל בשקט אם לא —
+     בודקים אם השורה קיימת ומחליטים בין PATCH ל-POST. שתי הקריאות
+     נשענות על מדיניות פשוטה ומפורשת. */
   async function requestLink(traineeId){
-    await rest('coach_links?on_conflict=coach_id,trainee_id', {
+    const mine = await rest('coach_links?coach_id=eq.' + user().id +
+                            '&trainee_id=eq.' + traineeId + '&select=id,status');
+    if (mine && mine.length){
+      await rest('coach_links?id=eq.' + mine[0].id, {
+        method: 'PATCH',
+        headers: {Prefer: 'return=minimal'},
+        body: JSON.stringify({
+          status: 'pending',
+          requested_at: new Date().toISOString(),
+          decided_at: null
+        })
+      });
+      return 'renewed';
+    }
+    await rest('coach_links', {
       method: 'POST',
-      headers: {Prefer: 'resolution=merge-duplicates,return=minimal'},
-      body: JSON.stringify({
-        coach_id: user().id,
-        trainee_id: traineeId,
-        status: 'pending',
-        requested_at: new Date().toISOString(),
-        decided_at: null
-      })
+      headers: {Prefer: 'return=minimal'},
+      body: JSON.stringify({coach_id: user().id, trainee_id: traineeId, status: 'pending'})
     });
+    return 'created';
+  }
+
+  /* עדכון תפקיד — מתאמן שרוצה להיות מאמן, או להפך */
+  async function setRole(role){
+    await rest('profiles?user_id=eq.' + user().id, {
+      method: 'PATCH',
+      headers: {Prefer: 'return=minimal'},
+      body: JSON.stringify({role: role === 'coach' ? 'coach' : 'trainee'})
+    });
+  }
+
+  /* אבחון: מחזיר תמונת מצב אמיתית במקום ניחושים */
+  async function diagnose(){
+    const out = {configured: ready(), signedIn: signedIn(), profile: null,
+                 links: null, errors: []};
+    if (!out.configured || !out.signedIn) return out;
+    try { out.profile = await myProfile(); }
+    catch(e){ out.errors.push('profiles: ' + (e.message || e)); }
+    try { out.links = (await coachLinks()).length; }
+    catch(e){ out.errors.push('coach_links: ' + (e.message || e)); }
+    try { await rest('messages?select=id&limit=1'); }
+    catch(e){ out.errors.push('messages: ' + (e.message || e)); }
+    return out;
   }
 
   async function setLinkStatus(id, status){
@@ -1090,7 +1136,7 @@ const Cloud = (() => {
     signUp, signIn, signOut, pull, enqueue, flush,
     myProfile, saveProfile, usernameTaken, searchUsers,
     coachLinks, traineeLinks, requestLink, setLinkStatus,
-    profilesByIds, pullFor, messages, sendMessage,
+    profilesByIds, pullFor, messages, sendMessage, setRole, diagnose,
     pending: () => Object.keys(queue).length,
     lastSync: () => LS.get('maazan:sb:lastsync'),
     onChange: fn => listeners.push(fn)
@@ -2443,7 +2489,7 @@ function maybeOnboard(){
    שורות של מתאמן רק כשקיים קישור מאושר. הקוד כאן הוא הממשק,
    לא ההגנה — ביטול אישור סוגר את הגישה גם אם הקוד לא ידע על כך.
    ============================================================ */
-const APP_VERSION = 15;
+const APP_VERSION = 16;
 const USERNAME_RE = /^[a-z0-9._-]{3,20}$/i;
 let coachTimer = null;
 
@@ -2465,6 +2511,39 @@ function bindSeg(id){
 }
 bindSeg('obRole');
 
+$('roleSeg').addEventListener('click', async e => {
+  const b = e.target.closest('button'); if (!b || !state.me) return;
+  const role = b.dataset.v;
+  if (role === state.me.role) return;
+  try {
+    await Cloud.setRole(role);
+    await loadMe();
+    toast(role === 'coach' ? 'החשבון סומן כמאמן' : 'החשבון סומן כמתאמן');
+  } catch(err){
+    toast(String((err && err.message) || err));
+    renderRoleUI();
+  }
+});
+
+$('diagBtn').addEventListener('click', async () => {
+  const out = $('diagOut');
+  out.hidden = false;
+  out.textContent = 'בודק…';
+  try {
+    const d = await Cloud.diagnose();
+    out.textContent =
+      'שרת מוגדר: ' + (d.configured ? 'כן' : 'לא') + '\n' +
+      'מחובר: ' + (d.signedIn ? 'כן' : 'לא') + '\n' +
+      'שם משתמש: ' + (d.profile ? '@' + d.profile.username : 'אין פרופיל') + '\n' +
+      'תפקיד: ' + (d.profile ? d.profile.role : '—') + '\n' +
+      'קישורים: ' + (d.links === null ? '—' : d.links) + '\n' +
+      'גרסה: ' + APP_VERSION +
+      (d.errors.length ? '\n\nשגיאות:\n' + d.errors.join('\n') : '\n\nהכל תקין');
+  } catch(e){
+    out.textContent = 'הבדיקה נכשלה: ' + ((e && e.message) || e);
+  }
+});
+
 async function loadMe(){
   state.me = null;
   if (!Cloud.signedIn() || !Cloud.ready()) { renderRoleUI(); return; }
@@ -2475,6 +2554,12 @@ async function loadMe(){
 
 function renderRoleUI(){
   const inn = Cloud.signedIn() && !!state.me;
+  $('roleRow').hidden = !inn;
+  $('diagRow').hidden = !Cloud.signedIn();
+  if (state.me){
+    [...$('roleSeg').children].forEach(b =>
+      b.setAttribute('aria-pressed', String(b.dataset.v === state.me.role)));
+  }
   $('coachEntry').hidden = !(inn && isCoach());
   $('reqBlock').hidden   = !(inn && !isCoach());
   if (inn && state.me){
@@ -2561,6 +2646,9 @@ async function runSearch(term){
 
 $('coachResults').addEventListener('click', async e => {
   const b = e.target.closest('[data-add]'); if (!b) return;
+  b.disabled = true;
+  const label = b.textContent;
+  b.textContent = 'שולח…';
   try {
     await Cloud.requestLink(b.dataset.add);
     toast('הבקשה נשלחה, ממתינה לאישור המתאמן');
@@ -2569,7 +2657,15 @@ $('coachResults').addEventListener('click', async e => {
   } catch(err){
     const m = String((err && err.message) || err);
     console.error('requestLink failed:', err);
-    toast(/409|duplicate|unique/i.test(m) ? 'כבר קיימת בקשה למתאמן הזה' : m);
+    /* 403 כאן פירושו כמעט תמיד שהחשבון לא מסומן כמאמן במסד */
+    if (/403|row-level|policy/i.test(m)){
+      toast('הבקשה נדחתה: החשבון שלך לא מסומן כמאמן. שנה את סוג החשבון במסך הפרופיל.');
+    } else if (/409|duplicate|unique/i.test(m)){
+      toast('כבר קיימת בקשה למתאמן הזה');
+    } else {
+      toast(m);
+    }
+    b.disabled = false; b.textContent = label;
   }
 });
 

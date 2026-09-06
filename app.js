@@ -1342,7 +1342,7 @@ function maybeOnboard(){
    שורות של מתאמן רק כשקיים קישור מאושר. הקוד כאן הוא הממשק,
    לא ההגנה — ביטול אישור סוגר את הגישה גם אם הקוד לא ידע על כך.
    ============================================================ */
-const APP_VERSION = 15;
+const APP_VERSION = 16;
 const USERNAME_RE = /^[a-z0-9._-]{3,20}$/i;
 let coachTimer = null;
 
@@ -1364,6 +1364,39 @@ function bindSeg(id){
 }
 bindSeg('obRole');
 
+$('roleSeg').addEventListener('click', async e => {
+  const b = e.target.closest('button'); if (!b || !state.me) return;
+  const role = b.dataset.v;
+  if (role === state.me.role) return;
+  try {
+    await Cloud.setRole(role);
+    await loadMe();
+    toast(role === 'coach' ? 'החשבון סומן כמאמן' : 'החשבון סומן כמתאמן');
+  } catch(err){
+    toast(String((err && err.message) || err));
+    renderRoleUI();
+  }
+});
+
+$('diagBtn').addEventListener('click', async () => {
+  const out = $('diagOut');
+  out.hidden = false;
+  out.textContent = 'בודק…';
+  try {
+    const d = await Cloud.diagnose();
+    out.textContent =
+      'שרת מוגדר: ' + (d.configured ? 'כן' : 'לא') + '\n' +
+      'מחובר: ' + (d.signedIn ? 'כן' : 'לא') + '\n' +
+      'שם משתמש: ' + (d.profile ? '@' + d.profile.username : 'אין פרופיל') + '\n' +
+      'תפקיד: ' + (d.profile ? d.profile.role : '—') + '\n' +
+      'קישורים: ' + (d.links === null ? '—' : d.links) + '\n' +
+      'גרסה: ' + APP_VERSION +
+      (d.errors.length ? '\n\nשגיאות:\n' + d.errors.join('\n') : '\n\nהכל תקין');
+  } catch(e){
+    out.textContent = 'הבדיקה נכשלה: ' + ((e && e.message) || e);
+  }
+});
+
 async function loadMe(){
   state.me = null;
   if (!Cloud.signedIn() || !Cloud.ready()) { renderRoleUI(); return; }
@@ -1374,6 +1407,12 @@ async function loadMe(){
 
 function renderRoleUI(){
   const inn = Cloud.signedIn() && !!state.me;
+  $('roleRow').hidden = !inn;
+  $('diagRow').hidden = !Cloud.signedIn();
+  if (state.me){
+    [...$('roleSeg').children].forEach(b =>
+      b.setAttribute('aria-pressed', String(b.dataset.v === state.me.role)));
+  }
   $('coachEntry').hidden = !(inn && isCoach());
   $('reqBlock').hidden   = !(inn && !isCoach());
   if (inn && state.me){
@@ -1460,6 +1499,9 @@ async function runSearch(term){
 
 $('coachResults').addEventListener('click', async e => {
   const b = e.target.closest('[data-add]'); if (!b) return;
+  b.disabled = true;
+  const label = b.textContent;
+  b.textContent = 'שולח…';
   try {
     await Cloud.requestLink(b.dataset.add);
     toast('הבקשה נשלחה, ממתינה לאישור המתאמן');
@@ -1468,7 +1510,15 @@ $('coachResults').addEventListener('click', async e => {
   } catch(err){
     const m = String((err && err.message) || err);
     console.error('requestLink failed:', err);
-    toast(/409|duplicate|unique/i.test(m) ? 'כבר קיימת בקשה למתאמן הזה' : m);
+    /* 403 כאן פירושו כמעט תמיד שהחשבון לא מסומן כמאמן במסד */
+    if (/403|row-level|policy/i.test(m)){
+      toast('הבקשה נדחתה: החשבון שלך לא מסומן כמאמן. שנה את סוג החשבון במסך הפרופיל.');
+    } else if (/409|duplicate|unique/i.test(m)){
+      toast('כבר קיימת בקשה למתאמן הזה');
+    } else {
+      toast(m);
+    }
+    b.disabled = false; b.textContent = label;
   }
 });
 

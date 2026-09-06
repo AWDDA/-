@@ -220,21 +220,54 @@ const Cloud = (() => {
                        '&select=id,coach_id,status,requested_at&order=requested_at.desc')) || [];
   }
 
-  /* בקשה חוזרת אחרי ביטול: יש אילוץ ייחודיות על (coach_id, trainee_id),
-     אז INSERT רגיל ייכשל ב-409. on_conflict מפנה את PostgREST לאילוץ
-     הנכון, וההוספה הופכת לעדכון של השורה הקיימת בחזרה ל-pending. */
+  /* בקשה חוזרת אחרי ביטול. במקום upsert עם on_conflict — שדורש
+     שהאילוץ יהיה בדיוק בשם ובצורה שהשרת מצפה להם, ונכשל בשקט אם לא —
+     בודקים אם השורה קיימת ומחליטים בין PATCH ל-POST. שתי הקריאות
+     נשענות על מדיניות פשוטה ומפורשת. */
   async function requestLink(traineeId){
-    await rest('coach_links?on_conflict=coach_id,trainee_id', {
+    const mine = await rest('coach_links?coach_id=eq.' + user().id +
+                            '&trainee_id=eq.' + traineeId + '&select=id,status');
+    if (mine && mine.length){
+      await rest('coach_links?id=eq.' + mine[0].id, {
+        method: 'PATCH',
+        headers: {Prefer: 'return=minimal'},
+        body: JSON.stringify({
+          status: 'pending',
+          requested_at: new Date().toISOString(),
+          decided_at: null
+        })
+      });
+      return 'renewed';
+    }
+    await rest('coach_links', {
       method: 'POST',
-      headers: {Prefer: 'resolution=merge-duplicates,return=minimal'},
-      body: JSON.stringify({
-        coach_id: user().id,
-        trainee_id: traineeId,
-        status: 'pending',
-        requested_at: new Date().toISOString(),
-        decided_at: null
-      })
+      headers: {Prefer: 'return=minimal'},
+      body: JSON.stringify({coach_id: user().id, trainee_id: traineeId, status: 'pending'})
     });
+    return 'created';
+  }
+
+  /* עדכון תפקיד — מתאמן שרוצה להיות מאמן, או להפך */
+  async function setRole(role){
+    await rest('profiles?user_id=eq.' + user().id, {
+      method: 'PATCH',
+      headers: {Prefer: 'return=minimal'},
+      body: JSON.stringify({role: role === 'coach' ? 'coach' : 'trainee'})
+    });
+  }
+
+  /* אבחון: מחזיר תמונת מצב אמיתית במקום ניחושים */
+  async function diagnose(){
+    const out = {configured: ready(), signedIn: signedIn(), profile: null,
+                 links: null, errors: []};
+    if (!out.configured || !out.signedIn) return out;
+    try { out.profile = await myProfile(); }
+    catch(e){ out.errors.push('profiles: ' + (e.message || e)); }
+    try { out.links = (await coachLinks()).length; }
+    catch(e){ out.errors.push('coach_links: ' + (e.message || e)); }
+    try { await rest('messages?select=id&limit=1'); }
+    catch(e){ out.errors.push('messages: ' + (e.message || e)); }
+    return out;
   }
 
   async function setLinkStatus(id, status){
@@ -284,7 +317,7 @@ const Cloud = (() => {
     signUp, signIn, signOut, pull, enqueue, flush,
     myProfile, saveProfile, usernameTaken, searchUsers,
     coachLinks, traineeLinks, requestLink, setLinkStatus,
-    profilesByIds, pullFor, messages, sendMessage,
+    profilesByIds, pullFor, messages, sendMessage, setRole, diagnose,
     pending: () => Object.keys(queue).length,
     lastSync: () => LS.get('maazan:sb:lastsync'),
     onChange: fn => listeners.push(fn)
