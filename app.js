@@ -154,7 +154,16 @@ const state = {
 
 function emptyLog(){ return {breakfast:[],lunch:[],dinner:[],snacks:[],exercise:[],water:0}; }
 function todayKey(d){ const x=d||new Date(); return x.getFullYear()+'-'+String(x.getMonth()+1).padStart(2,'0')+'-'+String(x.getDate()).padStart(2,'0'); }
-function $(id){ return document.getElementById(id); }
+/* getElementById נקרא אלפי פעמים בכל רינדור. מטמון פשוט חוסך
+   את החיפוש החוזר, ומתנקה כשאלמנט מוחלף. */
+const _el = {};
+function $(id){
+  let e = _el[id];
+  if (e && e.isConnected) return e;
+  e = document.getElementById(id);
+  if (e) _el[id] = e;
+  return e;
+}
 function round(n,d){ const m=Math.pow(10,d||0); return Math.round(n*m)/m; }
 function nf(n){ return Math.round(n).toLocaleString('he-IL'); }
 function esc(s){ return String(s).replace(/[&<>"']/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch])); }
@@ -484,7 +493,7 @@ function closeSheet(){
 }
 $('closeSheet').addEventListener('click', closeSheet);
 $('scrim').addEventListener('mousedown', e => { if (e.target === $('scrim')) closeSheet(); });
-document.addEventListener('keydown', e => { if (e.key === 'Escape' && !$('scrim').hidden) closeSheet(); });
+
 $('mealSel').addEventListener('change', e => { state.meal = e.target.value; });
 
 function showTab(which){
@@ -1342,7 +1351,7 @@ function maybeOnboard(){
    שורות של מתאמן רק כשקיים קישור מאושר. הקוד כאן הוא הממשק,
    לא ההגנה — ביטול אישור סוגר את הגישה גם אם הקוד לא ידע על כך.
    ============================================================ */
-const APP_VERSION = 23;
+const APP_VERSION = 24;
 const USERNAME_RE = /^[a-z0-9._-]{3,20}$/i;
 let coachTimer = null;
 
@@ -1685,12 +1694,7 @@ function closeChat(){
   document.body.style.overflow = '';
 }
 $('chatClose').addEventListener('click', closeChat);
-document.addEventListener('keydown', e => {
-  if (e.key === 'Escape'){
-    if (!$('lightbox').hidden){ $('lightbox').hidden = true; return; }
-    if (!$('chatPanel').hidden) closeChat();
-  }
-});
+
 
 function bubbleHtml(m, mine, cls){
   const t = m.created_at
@@ -2154,7 +2158,13 @@ async function openPicker(onPick){
   pickTarget = onPick;
   pickMuscle = ''; pickEquip = '';
   $('pickQ').value = '';
-  $('pickPanel').hidden = false;
+  /* חגורה ושלייקס: גם אם מישהו יוסיף בעתיד פאנל עם z-index גבוה,
+     העברת האלמנט לסוף ה-body מבטיחה שהוא ייצבע אחרון. */
+  const panel = $('pickPanel');
+  if (panel.parentNode !== document.body || panel.nextElementSibling){
+    document.body.appendChild(panel);
+  }
+  panel.hidden = false;
   document.body.style.overflow = 'hidden';
   drawChips();
   drawPickList();
@@ -2271,6 +2281,33 @@ $('exPick').addEventListener('click', () => openPicker(applyPicked));
 function exMeta(name){
   return allExercises().find(x => x.n === name) || null;
 }
+
+/* מאזין Escape אחד לכל השכבות, לפי סדר הערימה מלמעלה למטה */
+document.addEventListener('keydown', e => {
+  if (e.key !== 'Escape') return;
+  if (!$('lightbox').hidden){ $('lightbox').hidden = true; return; }
+  if (!$('onb').hidden) return;                 /* מסך פתיחה לא נסגר ב-Esc */
+  if (!$('pickPanel').hidden){ closePicker(); return; }
+  if (!$('chatPanel').hidden){ closeChat(); return; }
+  if (!$('planPanel').hidden){ closePlan(); return; }
+  if (!$('cam').hidden){ closeCam(); return; }
+  if (!$('scrim').hidden){ closeSheet(); return; }
+});
+
+/* טיימרים לא צריכים לרוץ כשהמסך מוסתר. חוסך רשת וסוללה. */
+let pausedTimers = null;
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden){
+    pausedTimers = {chat: !!chatTimer, coach: !!coachTimer};
+    if (chatTimer){ clearInterval(chatTimer); chatTimer = null; }
+    if (coachTimer){ clearInterval(coachTimer); coachTimer = null; }
+  } else if (pausedTimers){
+    if (pausedTimers.chat && chatLink){ loadChat(false); startChatPolling(2000); }
+    if (pausedTimers.coach && state.live){ drawLive(); coachTimer = setInterval(() => {
+      if (state.live) drawLive(); }, 20000); }
+    pausedTimers = null;
+  }
+});
 
 /* ---------- toast ---------- */
 let toastT;

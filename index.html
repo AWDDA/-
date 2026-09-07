@@ -58,8 +58,8 @@ body{background:var(--bg);color:var(--text);
 .bg{position:fixed;inset:0;z-index:-1;overflow:hidden;background:
   radial-gradient(760px 520px at 82% -6%, #1E2740 0%, transparent 62%),
   radial-gradient(620px 460px at -8% 96%, #1A2333 0%, transparent 66%), var(--bg)}
-.blob{position:absolute;border-radius:50%;filter:blur(100px)}
-.b1{width:64vw;height:64vw;background:#2E4C86;top:-20vw;right:-16vw;opacity:.30;animation:d1 34s ease-in-out infinite}
+.blob{position:absolute;border-radius:50%;filter:blur(70px);will-change:transform}
+.b1{width:60vw;height:60vw;background:#2E4C86;top:-20vw;right:-16vw;opacity:.30;animation:d1 34s ease-in-out infinite}
 .b2{width:52vw;height:52vw;background:#2B6157;bottom:-18vw;left:-14vw;opacity:.22;animation:d2 42s ease-in-out infinite}
 @keyframes d1{50%{transform:translate3d(-4vw,5vw,0) scale(1.06)}}
 @keyframes d2{50%{transform:translate3d(5vw,-4vw,0) scale(1.08)}}
@@ -320,8 +320,9 @@ option{background:#1B1F2B;color:var(--text)}
   background:var(--surface-2);border:1px solid var(--edge);border-radius:8px}
 
 /* הבורר נפתח מתוך פאנל התוכנית, ולשניהם .chat עם z-index 75.
-   בלי ערך גבוה יותר הוא נפתח מתחתיו ונראה כאילו כלום לא קרה. */
-.picker{z-index:78}
+   .picker לבדו לא מספיק: אותה ספציפיות, ו-.chat מוגדר אחריו בגיליון,
+   אז הוא מנצח. .chat.picker מעלה את הספציפיות ומנצח בלי תלות בסדר. */
+.chat.picker{z-index:78}
 .picker .pickbar{display:flex;align-items:center;gap:12px;flex:0 0 auto;
   padding:calc(14px + env(safe-area-inset-top)) 16px 14px}
 .picker .pickbar b{flex:1;text-align:center;font-size:22px;font-weight:600}
@@ -1008,7 +1009,6 @@ option{background:#1B1F2B;color:var(--text)}
 <input type="file" id="mealFile" accept="image/*" capture="environment" hidden>
 
 <div class="toast" id="toast" role="status" aria-live="polite"></div>
-<script src="./vendor/zxing.min.js"></script>
 <script src="./exercises.js"></script>
 <script src="./cloud.js"></script>
 <script src="./app.js"></script>
