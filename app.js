@@ -1342,7 +1342,7 @@ function maybeOnboard(){
    שורות של מתאמן רק כשקיים קישור מאושר. הקוד כאן הוא הממשק,
    לא ההגנה — ביטול אישור סוגר את הגישה גם אם הקוד לא ידע על כך.
    ============================================================ */
-const APP_VERSION = 19;
+const APP_VERSION = 20;
 const USERNAME_RE = /^[a-z0-9._-]{3,20}$/i;
 let coachTimer = null;
 
@@ -1938,10 +1938,16 @@ function drawPlanEditor(){
     '<div class="bhead" style="margin:14px 0 4px"><h2>יום ' + DAY_HE[planDay] + '</h2>' +
     '<span>' + (list.length ? list.length + ' תרגילים' : 'יום מנוחה') + '</span></div>' +
     (list.length
-      ? list.map((x, i) =>
-          '<div class="ex"><div class="num">' + (i + 1) + '</div>' +
-          '<div class="info"><b>' + esc(x.n) + '</b><span>' + esc(exLine(x)) + '</span></div>' +
-          '<button class="del" data-rm="' + i + '" aria-label="מחיקה">✕</button></div>').join('')
+      ? list.map((x, i) => {
+          const meta = exMeta(x.n);
+          return '<div class="ex">' +
+            (meta ? '<div class="map">' + muscleMapSVG(meta.m, 24) + '</div>'
+                  : '<div class="num">' + (i + 1) + '</div>') +
+            '<div class="info"><b>' + esc(x.n) + '</b><span>' +
+            (meta ? MUSCLES[meta.m] + ' · ' + EQUIP[meta.eq] + (exLine(x) ? ' · ' : '') : '') +
+            esc(exLine(x)) + '</span></div>' +
+            '<button class="del" data-rm="' + i + '" aria-label="מחיקה">✕</button></div>';
+        }).join('')
       : '<div class="empty">אין תרגילים ליום הזה. הוסף למטה, או השאר ריק ליום מנוחה.</div>');
 }
 
@@ -1962,7 +1968,7 @@ $('exAdd').addEventListener('click', () => {
     note: $('exNote').value.trim() || null
   });
   ['exName','exSets','exReps','exRest','exNote'].forEach(id => { $(id).value = ''; });
-  $('exName').focus();
+  $('exPickLabel').textContent = 'בחירה מהמאגר';
   drawPlanEditor();
 });
 
@@ -2051,12 +2057,18 @@ function drawMyWorkouts(){
 
   /* סימון אפשרי רק ביום הנוכחי — אחרת זה דיווח למפרע */
   $('wkBody').innerHTML =
-    list.map(x =>
-      '<label class="ex">' +
-      (isToday ? '<input type="checkbox" data-ex="' + esc(x.n) + '"' +
-                 (wkDone.indexOf(x.n) > -1 ? ' checked' : '') + '>' : '<div class="num">•</div>') +
-      '<div class="info"><b>' + esc(x.n) + '</b><span>' + esc(exLine(x)) + '</span></div></label>'
-    ).join('') +
+    list.map(x => {
+      const meta = exMeta(x.n);
+      return '<label class="ex">' +
+        (isToday ? '<input type="checkbox" data-ex="' + esc(x.n) + '"' +
+                   (wkDone.indexOf(x.n) > -1 ? ' checked' : '') + '>' : '') +
+        (meta ? '<div class="map">' + muscleMapSVG(meta.m, 24) + '</div>' : '') +
+        '<div class="info"><b>' + esc(x.n) + '</b><span>' +
+        (meta ? MUSCLES[meta.m] + ' · ' + EQUIP[meta.eq] + (exLine(x) ? ' · ' : '') : '') +
+        esc(exLine(x)) + '</span>' +
+        (meta && meta.d ? '<span style="color:var(--mut2);margin-top:4px">' + esc(meta.d) + '</span>' : '') +
+        '</div></label>';
+    }).join('') +
     (isToday
       ? '<div class="donebar"><div class="track"><i id="wkBar" style="background:var(--state);width:' +
         Math.round(list.filter(x => wkDone.indexOf(x.n) > -1).length / list.length * 100) +
@@ -2106,6 +2118,86 @@ async function drawWorkoutHistory(){
     void planned;
   }
   $('wkHistory').innerHTML = '<div class="hist">' + cells.join('') + '</div>';
+}
+
+
+/* ---------- בורר תרגילים ---------- */
+let pickMuscle = '', pickEquip = '', pickTarget = null;
+
+function openPicker(onPick){
+  pickTarget = onPick;
+  pickMuscle = ''; pickEquip = '';
+  $('pickQ').value = '';
+  $('pickPanel').hidden = false;
+  document.body.style.overflow = 'hidden';
+  drawChips();
+  drawPickList();
+  setTimeout(() => $('pickQ').focus(), 100);
+}
+function closePicker(){
+  $('pickPanel').hidden = true;
+  document.body.style.overflow = '';
+}
+$('pickClose').addEventListener('click', closePicker);
+
+function drawChips(){
+  const mUsed = {}, eUsed = {};
+  EXERCISES.forEach(x => { mUsed[x.m] = 1; eUsed[x.eq] = 1; });
+  $('pickMuscles').innerHTML =
+    '<button data-m="" aria-pressed="' + (!pickMuscle) + '">כל השרירים</button>' +
+    Object.keys(MUSCLES).filter(k => mUsed[k]).map(k =>
+      '<button data-m="' + k + '" aria-pressed="' + (pickMuscle === k) + '">' +
+      MUSCLES[k] + '</button>').join('');
+  $('pickEquip').innerHTML =
+    '<button data-e="" aria-pressed="' + (!pickEquip) + '">כל הציוד</button>' +
+    Object.keys(EQUIP).filter(k => eUsed[k]).map(k =>
+      '<button data-e="' + k + '" aria-pressed="' + (pickEquip === k) + '">' +
+      EQUIP[k] + '</button>').join('');
+}
+$('pickMuscles').addEventListener('click', e => {
+  const b = e.target.closest('[data-m]'); if (!b) return;
+  pickMuscle = b.dataset.m; drawChips(); drawPickList();
+});
+$('pickEquip').addEventListener('click', e => {
+  const b = e.target.closest('[data-e]'); if (!b) return;
+  pickEquip = b.dataset.e; drawChips(); drawPickList();
+});
+$('pickQ').addEventListener('input', drawPickList);
+
+function drawPickList(){
+  const q = $('pickQ').value.trim().toLowerCase();
+  const rows = EXERCISES.filter(x =>
+    (!pickMuscle || x.m === pickMuscle) &&
+    (!pickEquip  || x.eq === pickEquip) &&
+    (!q || x.n.toLowerCase().indexOf(q) > -1 || (x.en && x.en.indexOf(q) > -1)));
+
+  $('pickCount').textContent = rows.length + ' תרגילים';
+  $('pickList').innerHTML = rows.length
+    ? rows.map(x =>
+        '<div class="exrow" data-n="' + esc(x.n) + '">' +
+        '<div class="map">' + muscleMapSVG(x.m, 30) + '</div>' +
+        '<div class="txt"><b>' + esc(x.n) + '</b>' +
+        '<span>' + MUSCLES[x.m] + ' · ' + EQUIP[x.eq] + '</span>' +
+        '<em>' + esc(x.d) + '</em></div></div>').join('')
+    : '<div class="empty">לא נמצא תרגיל. אפשר להקליד שם משלך בטופס.</div>';
+}
+
+$('pickList').addEventListener('click', e => {
+  const row = e.target.closest('[data-n]'); if (!row) return;
+  const x = EXERCISES.find(v => v.n === row.dataset.n);
+  if (x && pickTarget) pickTarget(x);
+  closePicker();
+});
+
+$('exPick').addEventListener('click', () => openPicker(x => {
+  $('exName').value = x.n;
+  $('exPickLabel').textContent = x.n + ' · ' + MUSCLES[x.m];
+  if (!$('exNote').value) $('exNote').value = x.d;
+}));
+
+/* חיפוש שם תרגיל במאגר, לצורך הצגת מפת שרירים ליד תרגיל בתוכנית */
+function exMeta(name){
+  return EXERCISES.find(x => x.n === name) || null;
 }
 
 /* ---------- toast ---------- */

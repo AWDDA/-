@@ -1,6 +1,6 @@
 /* מאזן — service worker: אופליין מלא לקבצי האפליקציה */
-const CACHE = 'maazan-glass-v19';
-const ASSETS = ['./', './index.html', './app.js', './cloud.js', './vendor/zxing.min.js', './manifest.webmanifest',
+const CACHE = 'maazan-glass-v20';
+const ASSETS = ['./', './index.html', './app.js', './cloud.js', './exercises.js', './vendor/zxing.min.js', './manifest.webmanifest',
                 './icons/icon-192.png', './icons/icon-512.png'];
 
 self.addEventListener('install', e => {
