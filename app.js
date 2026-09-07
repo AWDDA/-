@@ -1342,7 +1342,7 @@ function maybeOnboard(){
    שורות של מתאמן רק כשקיים קישור מאושר. הקוד כאן הוא הממשק,
    לא ההגנה — ביטול אישור סוגר את הגישה גם אם הקוד לא ידע על כך.
    ============================================================ */
-const APP_VERSION = 22;
+const APP_VERSION = 23;
 const USERNAME_RE = /^[a-z0-9._-]{3,20}$/i;
 let coachTimer = null;
 
@@ -2158,11 +2158,16 @@ async function openPicker(onPick){
   document.body.style.overflow = 'hidden';
   drawChips();
   drawPickList();
-  setTimeout(() => $('pickQ').focus(), 100);
+  /* גלילה לראש הרשימה, אחרת פתיחה שנייה נפתחת באמצע */
+  const body = $('pickPanel').querySelector('.planbody');
+  if (body) body.scrollTop = 0;
+  $('pickMuscles').scrollLeft = 0;
+  $('pickEquip').scrollLeft = 0;
 }
 function closePicker(){
   $('pickPanel').hidden = true;
-  document.body.style.overflow = '';
+  /* פאנל התוכנית עשוי להיות עדיין פתוח מתחת — לא לשחרר את הנעילה */
+  if ($('planPanel').hidden && $('chatPanel').hidden) document.body.style.overflow = '';
 }
 
 function showPickView(v){
