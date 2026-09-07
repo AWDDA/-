@@ -310,36 +310,42 @@ option{background:#1B1F2B;color:var(--text)}
 .hist i.ok{background:rgba(92,210,164,.28);border-color:rgba(92,210,164,.45)}
 .hist span{font-size:var(--t-micro);color:var(--mut)}
 
-.suggest{margin-top:6px;background:var(--surface-2);border:1px solid var(--edge);
-  border-radius:var(--r-sm);overflow:hidden}
-.suggest[hidden]{display:none}
-.suggest button{width:100%;display:flex;align-items:center;gap:10px;background:none;border:0;
-  color:var(--text);font:inherit;text-align:start;padding:10px 12px;cursor:pointer}
-.suggest button + button{border-top:1px solid var(--edge)}
-.suggest button:active{background:rgba(92,210,164,.12)}
-.suggest b{font-size:var(--t-small);font-weight:500}
-.suggest span{color:var(--mut);font-size:var(--t-micro);margin-inline-start:auto}
-
 /* ---------- exercise picker ---------- */
-.pickbtn{width:100%;display:flex;align-items:center;justify-content:space-between;gap:10px;
+.pickbtn{width:100%;display:flex;align-items:center;gap:10px;
   background:rgba(255,255,255,.05);border:1px solid var(--edge);color:var(--text);
   border-radius:var(--r-sm);padding:12px 13px;font:inherit;font-size:var(--t-body);cursor:pointer;text-align:start}
-.pickbtn .chev{color:var(--state);font-size:var(--t-micro)}
-.chips{display:flex;gap:6px;padding:10px 16px 0;overflow-x:auto;scrollbar-width:none}
+.pickbtn .chev{color:var(--state);font-size:var(--t-micro);margin-inline-start:auto}
+.pickbtn .picked-map:empty{display:none}
+.pickbtn .picked-map{display:grid;place-items:center;width:30px;height:34px;flex:0 0 auto;
+  background:var(--surface-2);border:1px solid var(--edge);border-radius:8px}
+
+.picker .pickbar{display:flex;align-items:center;gap:12px;
+  padding:calc(14px + env(safe-area-inset-top)) 16px 14px}
+.picker .pickbar b{flex:1;text-align:center;font-size:22px;font-weight:600}
+.xbtn{width:38px;height:38px;border-radius:50%;border:1px solid var(--edge);background:var(--surface-2);
+  color:var(--text);font-size:16px;cursor:pointer;display:grid;place-items:center}
+.createbtn{background:var(--state);border:0;color:#0E1620;border-radius:999px;padding:10px 20px;
+  font:inherit;font-size:var(--t-small);font-weight:600;cursor:pointer}
+
+.searchwrap{position:relative;margin:0 16px}
+.searchwrap svg{position:absolute;inset-inline-start:14px;top:50%;transform:translateY(-50%);
+  width:19px;height:19px;stroke:var(--mut2);fill:none;stroke-width:2;stroke-linecap:round}
+.searchwrap input{border-radius:999px;padding-inline-start:42px;background:var(--surface-2)}
+
+.chips{display:flex;gap:8px;padding:12px 16px 0;overflow-x:auto;scrollbar-width:none}
 .chips::-webkit-scrollbar{display:none}
-.chips button{flex:0 0 auto;background:var(--surface);border:1px solid var(--edge);color:var(--mut);
-  font:inherit;font-size:var(--t-micro);padding:8px 13px;border-radius:999px;cursor:pointer}
-.chips button[aria-pressed="true"]{background:rgba(92,210,164,.16);color:var(--state);
-  border-color:rgba(92,210,164,.32);font-weight:500}
-.exrow{display:flex;align-items:center;gap:12px;padding:12px 0;cursor:pointer}
+.chips button{flex:0 0 auto;background:var(--surface-2);border:1px solid var(--edge);color:var(--text);
+  font:inherit;font-size:var(--t-small);padding:10px 18px;border-radius:999px;cursor:pointer}
+.chips button[aria-pressed="true"]{background:#fff;color:#111;border-color:#fff;font-weight:600}
+
+.exrow{display:flex;align-items:center;gap:14px;padding:14px 0;cursor:pointer}
 .exrow + .exrow{border-top:1px solid var(--edge)}
-.exrow .map{width:46px;height:52px;flex:0 0 auto;display:grid;place-items:center;
-  background:var(--surface-2);border:1px solid var(--edge);border-radius:11px}
+.exrow .map{width:76px;height:76px;flex:0 0 auto;display:grid;place-items:center;
+  background:var(--surface-2);border-radius:14px}
 .exrow .txt{flex:1;min-width:0}
-.exrow .txt b{display:block;font-size:var(--t-body);font-weight:500}
-.exrow .txt span{display:block;color:var(--mut);font-size:var(--t-micro);margin-top:2px}
-.exrow .txt em{display:block;color:var(--mut2);font-size:var(--t-micro);font-style:normal;margin-top:4px;
-  line-height:1.6}
+.exrow .txt b{display:block;font-size:var(--t-lead);font-weight:500;line-height:1.35}
+.exrow .txt span{display:block;color:var(--mut);font-size:var(--t-small);margin-top:4px}
+.exrow .mine{color:var(--state);font-size:var(--t-micro)}
 .ex .map{width:34px;height:40px;flex:0 0 auto;display:grid;place-items:center;
   background:var(--surface-2);border:1px solid var(--edge);border-radius:9px}
 
@@ -906,18 +912,37 @@ option{background:#1B1F2B;color:var(--text)}
   <input type="file" id="chatFile" accept="image/*" hidden>
 </div>
 
-<div class="chat" id="pickPanel" hidden>
-  <div class="chatbar">
-    <button class="mini" id="pickClose">סגירה</button>
-    <b>מאגר התרגילים</b>
-    <span class="tag" id="pickCount"></span>
+<div class="chat picker" id="pickPanel" hidden>
+  <div class="pickbar">
+    <button class="createbtn" id="pickCreate">יצירה</button>
+    <b>תרגילים</b>
+    <button class="xbtn" id="pickClose" aria-label="סגירה">✕</button>
   </div>
-  <div style="padding:12px 16px 0">
-    <input id="pickQ" type="search" placeholder="חפש תרגיל…" autocomplete="off">
+
+  <div id="pickBrowse">
+    <div class="searchwrap">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+      <input id="pickQ" type="search" placeholder="חפש תרגילים…" autocomplete="off">
+    </div>
+    <div class="chips" id="pickMuscles"></div>
+    <div class="chips" id="pickEquip"></div>
+    <div class="planbody"><div id="pickList"></div></div>
   </div>
-  <div class="chips" id="pickMuscles"></div>
-  <div class="chips" id="pickEquip"></div>
-  <div class="planbody"><div id="pickList"></div></div>
+
+  <div id="pickCreateForm" hidden class="planbody">
+    <div class="planadd" style="margin-top:16px">
+      <div class="field"><label for="cxName">שם התרגיל</label>
+        <input id="cxName" placeholder="למשל: לחיצת חזה בהתנגדות"></div>
+      <div class="grid2">
+        <div class="field"><label for="cxMuscle">שריר</label><select id="cxMuscle"></select></div>
+        <div class="field"><label for="cxEquip">ציוד</label><select id="cxEquip"></select></div>
+      </div>
+      <div class="field" style="margin-top:10px"><label for="cxNote">דגש טכני</label>
+        <input id="cxNote" placeholder="מה חשוב לזכור בביצוע"></div>
+      <button class="btn" id="cxSave" style="margin-top:12px">שמירה למאגר שלי</button>
+      <button class="btn sec" id="cxCancel" style="margin-top:8px">ביטול</button>
+    </div>
+  </div>
 </div>
 
 <div class="chat" id="planPanel" hidden>
@@ -931,10 +956,11 @@ option{background:#1B1F2B;color:var(--text)}
     <div id="planList"></div>
     <div class="planadd">
       <div class="field"><label>תרגיל</label>
-        <button class="pickbtn" id="exPick"><span id="exPickLabel">בחירה מהמאגר</span>
+        <button class="pickbtn" id="exPick">
+          <span class="picked-map" id="exPickMap"></span>
+          <span id="exPickLabel">בחירת תרגיל מהמאגר</span>
           <span class="chev">חיפוש</span></button>
-        <input id="exName" placeholder="או הקלד כדי לחפש…" autocomplete="off" style="margin-top:8px">
-        <div id="exSuggest" class="suggest" hidden></div></div>
+        <input type="hidden" id="exName"></div>
       <div class="grid3">
         <div class="field"><label for="exSets">סטים</label>
           <input id="exSets" type="number" min="1" max="20" inputmode="numeric" placeholder="4"></div>

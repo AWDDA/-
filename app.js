@@ -1342,7 +1342,7 @@ function maybeOnboard(){
    שורות של מתאמן רק כשקיים קישור מאושר. הקוד כאן הוא הממשק,
    לא ההגנה — ביטול אישור סוגר את הגישה גם אם הקוד לא ידע על כך.
    ============================================================ */
-const APP_VERSION = 21;
+const APP_VERSION = 22;
 const USERNAME_RE = /^[a-z0-9._-]{3,20}$/i;
 let coachTimer = null;
 
@@ -1970,8 +1970,7 @@ $('exAdd').addEventListener('click', () => {
     note: $('exNote').value.trim() || null
   });
   ['exName','exSets','exReps','exRest','exNote'].forEach(id => { $(id).value = ''; });
-  $('exPickLabel').textContent = 'בחירה מהמאגר';
-  $('exSuggest').hidden = true;
+  clearPicked();
   drawPlanEditor();
 });
 
@@ -2126,6 +2125,16 @@ async function drawWorkoutHistory(){
 
 /* ---------- בורר תרגילים ---------- */
 let pickMuscle = '', pickEquip = '', pickTarget = null;
+let customEx = [];        /* תרגילים שהמאמן יצר */
+
+async function loadCustomEx(){
+  try { customEx = JSON.parse(await Store.get('maazan:customex')) || []; }
+  catch(e){ customEx = []; }
+}
+function allExercises(){
+  const base = (typeof EXERCISES !== 'undefined' && Array.isArray(EXERCISES)) ? EXERCISES : [];
+  return customEx.concat(base);
+}
 
 /* המאגר יושב בקובץ נפרד. אם הוא לא הועלה או ש-cache ישן הגיש
    index.html בלי תג הסקריפט, EXERCISES לא מוגדר והלחיצה מתה בשקט.
@@ -2140,6 +2149,8 @@ async function ensureExercises(){
 
 async function openPicker(onPick){
   if (!(await ensureExercises())) return;
+  await loadCustomEx();
+  showPickView('browse');
   pickTarget = onPick;
   pickMuscle = ''; pickEquip = '';
   $('pickQ').value = '';
@@ -2153,11 +2164,41 @@ function closePicker(){
   $('pickPanel').hidden = true;
   document.body.style.overflow = '';
 }
+
+function showPickView(v){
+  $('pickBrowse').hidden     = (v !== 'browse');
+  $('pickCreateForm').hidden = (v !== 'create');
+}
+
+/* ---------- יצירת תרגיל אישי ---------- */
+$('pickCreate').addEventListener('click', () => {
+  $('cxMuscle').innerHTML = Object.keys(MUSCLES).map(k =>
+    '<option value="' + k + '">' + MUSCLES[k] + '</option>').join('');
+  $('cxEquip').innerHTML = Object.keys(EQUIP).map(k =>
+    '<option value="' + k + '">' + EQUIP[k] + '</option>').join('');
+  ['cxName','cxNote'].forEach(id => { $(id).value = ''; });
+  showPickView('create');
+  $('cxName').focus();
+});
+$('cxCancel').addEventListener('click', () => showPickView('browse'));
+
+$('cxSave').addEventListener('click', async () => {
+  const n = $('cxName').value.trim();
+  if (!n){ toast('צריך שם לתרגיל'); return; }
+  if (allExercises().some(x => x.n === n)){ toast('כבר קיים תרגיל בשם הזה'); return; }
+  const x = {n, en:'', m:$('cxMuscle').value, eq:$('cxEquip').value,
+             d:$('cxNote').value.trim(), mine:true};
+  customEx.unshift(x);
+  await Store.set('maazan:customex', JSON.stringify(customEx));
+  if (pickTarget) pickTarget(x);
+  closePicker();
+  toast('התרגיל נוסף למאגר שלך');
+});
 $('pickClose').addEventListener('click', closePicker);
 
 function drawChips(){
   const mUsed = {}, eUsed = {};
-  EXERCISES.forEach(x => { mUsed[x.m] = 1; eUsed[x.eq] = 1; });
+  allExercises().forEach(x => { mUsed[x.m] = 1; eUsed[x.eq] = 1; });
   $('pickMuscles').innerHTML =
     '<button data-m="" aria-pressed="' + (!pickMuscle) + '">כל השרירים</button>' +
     Object.keys(MUSCLES).filter(k => mUsed[k]).map(k =>
@@ -2181,70 +2222,49 @@ $('pickQ').addEventListener('input', drawPickList);
 
 function drawPickList(){
   const q = $('pickQ').value.trim().toLowerCase();
-  const rows = EXERCISES.filter(x =>
+  const rows = allExercises().filter(x =>
     (!pickMuscle || x.m === pickMuscle) &&
     (!pickEquip  || x.eq === pickEquip) &&
-    (!q || x.n.toLowerCase().indexOf(q) > -1 || (x.en && x.en.indexOf(q) > -1)));
+    (!q || x.n.toLowerCase().indexOf(q) > -1 ||
+     (x.en && x.en.indexOf(q) > -1) ||
+     MUSCLES[x.m].indexOf(q) > -1 || EQUIP[x.eq].indexOf(q) > -1));
 
-  $('pickCount').textContent = rows.length + ' תרגילים';
+  /* התמונה משמאל והטקסט מימין, כמו ברשימות תרגילים מוכרות */
   $('pickList').innerHTML = rows.length
     ? rows.map(x =>
         '<div class="exrow" data-n="' + esc(x.n) + '">' +
-        '<div class="map">' + muscleMapSVG(x.m, 30) + '</div>' +
         '<div class="txt"><b>' + esc(x.n) + '</b>' +
         '<span>' + MUSCLES[x.m] + ' · ' + EQUIP[x.eq] + '</span>' +
-        '<em>' + esc(x.d) + '</em></div></div>').join('')
-    : '<div class="empty">לא נמצא תרגיל. אפשר להקליד שם משלך בטופס.</div>';
+        (x.mine ? '<span class="mine">התרגיל שלי</span>' : '') + '</div>' +
+        '<div class="map">' + muscleMapSVG(x.m, 46) + '</div></div>').join('')
+    : '<div class="empty">לא נמצא תרגיל בשם הזה. אפשר ליצור אותו עם «יצירה» למעלה.</div>';
 }
 
 $('pickList').addEventListener('click', e => {
   const row = e.target.closest('[data-n]'); if (!row) return;
-  const x = EXERCISES.find(v => v.n === row.dataset.n);
+  const x = allExercises().find(v => v.n === row.dataset.n);
   if (x && pickTarget) pickTarget(x);
   closePicker();
 });
 
 function applyPicked(x){
   $('exName').value = x.n;
-  $('exPickLabel').textContent = x.n + ' · ' + MUSCLES[x.m];
-  if (!$('exNote').value) $('exNote').value = x.d;
-  $('exSuggest').hidden = true;
+  $('exPickLabel').textContent = x.n;
+  $('exPickMap').innerHTML = muscleMapSVG(x.m, 20);
+  if (!$('exNote').value && x.d) $('exNote').value = x.d;
+}
+
+function clearPicked(){
+  $('exName').value = '';
+  $('exPickLabel').textContent = 'בחירת תרגיל מהמאגר';
+  $('exPickMap').innerHTML = '';
 }
 
 $('exPick').addEventListener('click', () => openPicker(applyPicked));
 
-/* הצעות תוך כדי הקלדה — זה מה שמשתמש מנסה קודם, לפני שהוא
-   מחפש כפתור שפותח פאנל. */
-$('exName').addEventListener('input', async () => {
-  const q = $('exName').value.trim().toLowerCase();
-  const box = $('exSuggest');
-  if (q.length < 2){ box.hidden = true; return; }
-  if (!(typeof EXERCISES !== 'undefined' && Array.isArray(EXERCISES))){
-    if (!(await ensureExercises())) return;
-  }
-  const rows = EXERCISES.filter(x =>
-    x.n.toLowerCase().indexOf(q) > -1 ||
-    (x.en && x.en.indexOf(q) > -1) ||
-    MUSCLES[x.m].indexOf(q) > -1 ||
-    EQUIP[x.eq].indexOf(q) > -1).slice(0, 6);
-  if (!rows.length){ box.hidden = true; return; }
-  box.innerHTML = rows.map(x =>
-    '<button type="button" data-sn="' + esc(x.n) + '">' +
-    muscleMapSVG(x.m, 18) + '<b>' + esc(x.n) + '</b>' +
-    '<span>' + MUSCLES[x.m] + ' · ' + EQUIP[x.eq] + '</span></button>').join('');
-  box.hidden = false;
-});
-
-$('exSuggest').addEventListener('click', e => {
-  const b = e.target.closest('[data-sn]'); if (!b) return;
-  const x = EXERCISES.find(v => v.n === b.dataset.sn);
-  if (x) applyPicked(x);
-});
-
 /* חיפוש שם תרגיל במאגר, לצורך הצגת מפת שרירים ליד תרגיל בתוכנית */
 function exMeta(name){
-  if (typeof EXERCISES === 'undefined' || !Array.isArray(EXERCISES)) return null;
-  return EXERCISES.find(x => x.n === name) || null;
+  return allExercises().find(x => x.n === name) || null;
 }
 
 /* ---------- toast ---------- */
@@ -2291,6 +2311,7 @@ window.addEventListener('appinstalled', () => { $('installBtn').hidden = true; }
   maybeOnboard();
   loadMe();
 
+  loadCustomEx();
   const ver = $('appVer');
   if (ver) ver.textContent = 'גרסה ' + APP_VERSION;
   console.log('מאזן — גרסה', APP_VERSION);
