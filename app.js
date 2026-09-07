@@ -1342,7 +1342,7 @@ function maybeOnboard(){
    שורות של מתאמן רק כשקיים קישור מאושר. הקוד כאן הוא הממשק,
    לא ההגנה — ביטול אישור סוגר את הגישה גם אם הקוד לא ידע על כך.
    ============================================================ */
-const APP_VERSION = 20;
+const APP_VERSION = 21;
 const USERNAME_RE = /^[a-z0-9._-]{3,20}$/i;
 let coachTimer = null;
 
@@ -1390,6 +1390,8 @@ $('diagBtn').addEventListener('click', async () => {
       'שם משתמש: ' + (d.profile ? '@' + d.profile.username : 'אין פרופיל') + '\n' +
       'תפקיד: ' + (d.profile ? d.profile.role : '—') + '\n' +
       'קישורים: ' + (d.links === null ? '—' : d.links) + '\n' +
+      'מאגר תרגילים: ' + (typeof EXERCISES !== 'undefined' && EXERCISES.length
+        ? EXERCISES.length : 'חסר — exercises.js לא נטען') + '\n' +
       'גרסה: ' + APP_VERSION +
       (d.errors.length ? '\n\nשגיאות:\n' + d.errors.join('\n') : '\n\nהכל תקין');
   } catch(e){
@@ -1969,6 +1971,7 @@ $('exAdd').addEventListener('click', () => {
   });
   ['exName','exSets','exReps','exRest','exNote'].forEach(id => { $(id).value = ''; });
   $('exPickLabel').textContent = 'בחירה מהמאגר';
+  $('exSuggest').hidden = true;
   drawPlanEditor();
 });
 
@@ -2124,7 +2127,19 @@ async function drawWorkoutHistory(){
 /* ---------- בורר תרגילים ---------- */
 let pickMuscle = '', pickEquip = '', pickTarget = null;
 
-function openPicker(onPick){
+/* המאגר יושב בקובץ נפרד. אם הוא לא הועלה או ש-cache ישן הגיש
+   index.html בלי תג הסקריפט, EXERCISES לא מוגדר והלחיצה מתה בשקט.
+   כאן מנסים לטעון אותו, ואם אין — אומרים את זה במפורש. */
+async function ensureExercises(){
+  if (typeof EXERCISES !== 'undefined' && Array.isArray(EXERCISES)) return true;
+  try { await loadScript('./exercises.js'); } catch(e){}
+  if (typeof EXERCISES !== 'undefined' && Array.isArray(EXERCISES)) return true;
+  toast('קובץ מאגר התרגילים (exercises.js) חסר באתר. אפשר להקליד שם תרגיל ידנית.');
+  return false;
+}
+
+async function openPicker(onPick){
+  if (!(await ensureExercises())) return;
   pickTarget = onPick;
   pickMuscle = ''; pickEquip = '';
   $('pickQ').value = '';
@@ -2189,14 +2204,46 @@ $('pickList').addEventListener('click', e => {
   closePicker();
 });
 
-$('exPick').addEventListener('click', () => openPicker(x => {
+function applyPicked(x){
   $('exName').value = x.n;
   $('exPickLabel').textContent = x.n + ' · ' + MUSCLES[x.m];
   if (!$('exNote').value) $('exNote').value = x.d;
-}));
+  $('exSuggest').hidden = true;
+}
+
+$('exPick').addEventListener('click', () => openPicker(applyPicked));
+
+/* הצעות תוך כדי הקלדה — זה מה שמשתמש מנסה קודם, לפני שהוא
+   מחפש כפתור שפותח פאנל. */
+$('exName').addEventListener('input', async () => {
+  const q = $('exName').value.trim().toLowerCase();
+  const box = $('exSuggest');
+  if (q.length < 2){ box.hidden = true; return; }
+  if (!(typeof EXERCISES !== 'undefined' && Array.isArray(EXERCISES))){
+    if (!(await ensureExercises())) return;
+  }
+  const rows = EXERCISES.filter(x =>
+    x.n.toLowerCase().indexOf(q) > -1 ||
+    (x.en && x.en.indexOf(q) > -1) ||
+    MUSCLES[x.m].indexOf(q) > -1 ||
+    EQUIP[x.eq].indexOf(q) > -1).slice(0, 6);
+  if (!rows.length){ box.hidden = true; return; }
+  box.innerHTML = rows.map(x =>
+    '<button type="button" data-sn="' + esc(x.n) + '">' +
+    muscleMapSVG(x.m, 18) + '<b>' + esc(x.n) + '</b>' +
+    '<span>' + MUSCLES[x.m] + ' · ' + EQUIP[x.eq] + '</span></button>').join('');
+  box.hidden = false;
+});
+
+$('exSuggest').addEventListener('click', e => {
+  const b = e.target.closest('[data-sn]'); if (!b) return;
+  const x = EXERCISES.find(v => v.n === b.dataset.sn);
+  if (x) applyPicked(x);
+});
 
 /* חיפוש שם תרגיל במאגר, לצורך הצגת מפת שרירים ליד תרגיל בתוכנית */
 function exMeta(name){
+  if (typeof EXERCISES === 'undefined' || !Array.isArray(EXERCISES)) return null;
   return EXERCISES.find(x => x.n === name) || null;
 }
 

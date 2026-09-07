@@ -310,6 +310,16 @@ option{background:#1B1F2B;color:var(--text)}
 .hist i.ok{background:rgba(92,210,164,.28);border-color:rgba(92,210,164,.45)}
 .hist span{font-size:var(--t-micro);color:var(--mut)}
 
+.suggest{margin-top:6px;background:var(--surface-2);border:1px solid var(--edge);
+  border-radius:var(--r-sm);overflow:hidden}
+.suggest[hidden]{display:none}
+.suggest button{width:100%;display:flex;align-items:center;gap:10px;background:none;border:0;
+  color:var(--text);font:inherit;text-align:start;padding:10px 12px;cursor:pointer}
+.suggest button + button{border-top:1px solid var(--edge)}
+.suggest button:active{background:rgba(92,210,164,.12)}
+.suggest b{font-size:var(--t-small);font-weight:500}
+.suggest span{color:var(--mut);font-size:var(--t-micro);margin-inline-start:auto}
+
 /* ---------- exercise picker ---------- */
 .pickbtn{width:100%;display:flex;align-items:center;justify-content:space-between;gap:10px;
   background:rgba(255,255,255,.05);border:1px solid var(--edge);color:var(--text);
@@ -923,7 +933,8 @@ option{background:#1B1F2B;color:var(--text)}
       <div class="field"><label>תרגיל</label>
         <button class="pickbtn" id="exPick"><span id="exPickLabel">בחירה מהמאגר</span>
           <span class="chev">חיפוש</span></button>
-        <input id="exName" placeholder="או הקלד תרגיל משלך" style="margin-top:8px"></div>
+        <input id="exName" placeholder="או הקלד כדי לחפש…" autocomplete="off" style="margin-top:8px">
+        <div id="exSuggest" class="suggest" hidden></div></div>
       <div class="grid3">
         <div class="field"><label for="exSets">סטים</label>
           <input id="exSets" type="number" min="1" max="20" inputmode="numeric" placeholder="4"></div>
