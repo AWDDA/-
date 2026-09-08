@@ -381,24 +381,24 @@ function renderWeight(){
 function renderAll(){ renderProfile(); renderDiary(); renderWater(); renderRecents(); renderSummary(); renderDate(); }
 
 /* ---------- navigation ---------- */
-const SUBS = {home:'סקירת היום', diary:'יומן האכילה', prog:'המגמה שלך',
-              me:'היעד האישי', coach:'המתאמנים שלי'};
+const SUBS = {home:'סקירת היום', diary:'יומן האכילה', prog:'המגמה שלך', me:'היעד האישי'};
 function goto(scr){
   state.screen = scr;
-  ['home','diary','prog','me','coach'].forEach(s => { $('scr-'+s).hidden = (s !== scr); });
+  ['home','diary','prog','me'].forEach(s => { $('scr-'+s).hidden = (s !== scr); });
   document.querySelectorAll('.tab').forEach(b => b.setAttribute('aria-current', b.dataset.scr === scr ? 'page' : 'false'));
   $('dateBar').style.display = (scr === 'home' || scr === 'diary') ? '' : 'none';
   $('barSub').textContent = SUBS[scr];
   if (scr === 'prog') renderProgress();
-  if (scr === 'coach') refreshCoach();
-  if (scr !== 'coach') stopLive();
+  if (scr !== 'prog') stopLive();
   window.scrollTo({top:0});
 }
 document.querySelector('.tabbar').addEventListener('click', e => {
   const b = e.target.closest('.tab'); if (b) goto(b.dataset.scr);
 });
 document.addEventListener('click', e => {
-  const g = e.target.closest('[data-go]'); if (g) goto(g.dataset.go);
+  const g = e.target.closest('[data-go]'); if (!g) return;
+  if (g.dataset.go === 'coach'){ goto('prog'); progTab('coaching'); return; }
+  goto(g.dataset.go);
 });
 $('chart').addEventListener('click', e => {
   const c = e.target.closest('[data-day]'); if (!c) return;
@@ -1351,7 +1351,7 @@ function maybeOnboard(){
    שורות של מתאמן רק כשקיים קישור מאושר. הקוד כאן הוא הממשק,
    לא ההגנה — ביטול אישור סוגר את הגישה גם אם הקוד לא ידע על כך.
    ============================================================ */
-const APP_VERSION = 24;
+const APP_VERSION = 25;
 const USERNAME_RE = /^[a-z0-9._-]{3,20}$/i;
 let coachTimer = null;
 
@@ -1424,8 +1424,11 @@ function renderRoleUI(){
     [...$('roleSeg').children].forEach(b =>
       b.setAttribute('aria-pressed', String(b.dataset.v === state.me.role)));
   }
-  $('coachEntry').hidden = !(inn && isCoach());
-  $('reqBlock').hidden   = !(inn && !isCoach());
+  $('coachEntry').hidden  = !(inn && isCoach());
+  $('reqBlock').hidden    = !(inn && !isCoach());
+  $('tabCoaching').hidden = !(inn && isCoach());
+  /* אם התפקיד השתנה בזמן שהקטגוריה פתוחה — לא להשאיר מסך יתום */
+  if (!isCoach() && !$('prog-coaching').hidden) progTab('mine');
   if (inn && state.me){
     $('coachEntrySub').textContent =
       'מחובר כ־@' + state.me.username + '. חפש מתאמן לפי שם משתמש ובקש גישה ליומן שלו.';
@@ -2005,15 +2008,23 @@ $('planSave').addEventListener('click', async () => {
 /* ---------- צד המתאמן ---------- */
 let myLink = null, wkDay = new Date().getDay(), wkPlan = null, wkDone = [];
 
-$('progTabs').addEventListener('click', e => {
-  const b = e.target.closest('[data-t]'); if (!b) return;
-  const t = b.dataset.t;
-  [...e.currentTarget.children].forEach(x => x.setAttribute('aria-pressed', String(x === b)));
-  ['mine','workouts','friends'].forEach(k => { $('prog-' + k).hidden = (k !== t); });
+const PROG_TABS = ['mine','workouts','friends','coaching'];
+
+function progTab(t){
+  [...$('progTabs').children].forEach(x =>
+    x.setAttribute('aria-pressed', String(x.dataset.t === t)));
+  PROG_TABS.forEach(k => { $('prog-' + k).hidden = (k !== t); });
   if (t === 'workouts') loadMyWorkouts();
+  if (t === 'coaching') refreshCoach(); else stopLive();
+  window.scrollTo({top:0});
+}
+
+$('progTabs').addEventListener('click', e => {
+  const b = e.target.closest('[data-t]'); if (b) progTab(b.dataset.t);
 });
 
 async function loadMyWorkouts(){
+  refreshRequests();
   $('wkBody').innerHTML = '<div class="empty"><i class="spin"></i>טוען…</div>';
   if (!Cloud.signedIn()){
     $('wkBody').innerHTML = '<div class="empty">צריך להתחבר כדי לראות תוכנית.</div>';

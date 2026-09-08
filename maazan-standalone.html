@@ -276,9 +276,11 @@ option{background:#1B1F2B;color:var(--text)}
 .livegrid span{font-size:var(--t-micro);color:var(--mut)}
 
 /* ---------- tabs & plans ---------- */
-.segtabs{display:flex;gap:6px;margin-bottom:12px}
-.segtabs button{flex:1;background:var(--surface);border:1px solid var(--edge);color:var(--mut);
-  font:inherit;font-size:var(--t-small);padding:10px 4px;border-radius:999px;cursor:pointer}
+.segtabs{display:flex;gap:6px;margin-bottom:12px;overflow-x:auto;scrollbar-width:none;
+  -webkit-overflow-scrolling:touch}
+.segtabs::-webkit-scrollbar{display:none}
+.segtabs button{flex:1 0 auto;white-space:nowrap;background:var(--surface);border:1px solid var(--edge);
+  color:var(--mut);font:inherit;font-size:var(--t-small);padding:10px 14px;border-radius:999px;cursor:pointer}
 .segtabs button[aria-pressed="true"]{background:rgba(92,210,164,.15);color:var(--state);
   border-color:rgba(92,210,164,.3);font-weight:500}
 .daytabs{display:flex;gap:5px;padding:12px 16px;overflow-x:auto;scrollbar-width:none}
@@ -583,6 +585,7 @@ option{background:#1B1F2B;color:var(--text)}
         <button data-t="mine" aria-pressed="true">ההתקדמות שלי</button>
         <button data-t="workouts" aria-pressed="false">האימונים שלי</button>
         <button data-t="friends" aria-pressed="false">חברים</button>
+        <button data-t="coaching" id="tabCoaching" aria-pressed="false" hidden>המתאמנים שלי</button>
       </div>
 
       <div id="prog-mine">
@@ -614,7 +617,38 @@ option{background:#1B1F2B;color:var(--text)}
           <div class="bhead"><h2>השבוע האחרון</h2></div>
           <div id="wkHistory"></div>
         </div>
+
+        <div class="block" id="reqBlock" hidden>
+        <div class="bhead"><h2>בקשות מאמנים</h2><span id="reqCount"></span></div>
+        <div id="reqList"></div>
       </div>
+      </div>
+
+      <div id="prog-coaching" hidden>
+      <div class="block">
+        <div class="bhead"><h2>חיפוש מתאמן</h2></div>
+        <input id="coachQ" type="search" placeholder="שם משתמש או שם לתצוגה" autocomplete="off">
+        <ul class="results" id="coachResults"></ul>
+      </div>
+
+      <div class="block">
+        <div class="bhead"><h2>המתאמנים שלי</h2>
+          <a id="coachRefresh">רענון</a></div>
+        <div style="color:var(--mut);font-size:var(--t-micro);margin:-8px 0 10px"
+             id="coachStatus"></div>
+        <div id="coachList"></div>
+      </div>
+
+      <div class="block" id="liveBlock" hidden>
+        <div class="bhead"><h2 id="liveName">מתאמן</h2><span class="live" id="liveDot">חי</span></div>
+        <div id="liveBody"></div>
+        <div class="btnrow" style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+          <button class="btn" id="liveChat" hidden>פתיחת שיחה</button>
+          <button class="btn sec" id="livePlan" hidden>תוכנית אימונים</button>
+          <button class="btn sec" id="liveClose" style="grid-column:1/-1">סגירת התצוגה</button>
+        </div>
+      </div>
+          </div>
 
       <div id="prog-friends" hidden>
         <div class="block">
@@ -722,38 +756,7 @@ option{background:#1B1F2B;color:var(--text)}
            id="coachEntrySub">חפש מתאמן לפי שם משתמש ובקש גישה לצפייה ביומן שלו.</p>
       </div>
 
-      <div class="block" id="reqBlock" hidden>
-        <div class="bhead"><h2>בקשות מאמנים</h2><span id="reqCount"></span></div>
-        <div id="reqList"></div>
-      </div>
-
       <p class="legalnote"><span id="appVer">גרסה —</span><br>המספרים הם הערכה סטטיסטית ואינם ייעוץ תזונתי.<br>בלי חשבון הנתונים נשמרים במכשיר הזה בלבד.</p>
-    </section>
-    <!-- ============ COACH ============ -->
-    <section class="screen" id="scr-coach" hidden>
-      <div class="block">
-        <div class="bhead"><h2>חיפוש מתאמן</h2></div>
-        <input id="coachQ" type="search" placeholder="שם משתמש או שם לתצוגה" autocomplete="off">
-        <ul class="results" id="coachResults"></ul>
-      </div>
-
-      <div class="block">
-        <div class="bhead"><h2>המתאמנים שלי</h2>
-          <a id="coachRefresh">רענון</a></div>
-        <div style="color:var(--mut);font-size:var(--t-micro);margin:-8px 0 10px"
-             id="coachStatus"></div>
-        <div id="coachList"></div>
-      </div>
-
-      <div class="block" id="liveBlock" hidden>
-        <div class="bhead"><h2 id="liveName">מתאמן</h2><span class="live" id="liveDot">חי</span></div>
-        <div id="liveBody"></div>
-        <div class="btnrow" style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
-          <button class="btn" id="liveChat" hidden>פתיחת שיחה</button>
-          <button class="btn sec" id="livePlan" hidden>תוכנית אימונים</button>
-          <button class="btn sec" id="liveClose" style="grid-column:1/-1">סגירת התצוגה</button>
-        </div>
-      </div>
     </section>
   </main>
 
@@ -2005,24 +2008,24 @@ function renderWeight(){
 function renderAll(){ renderProfile(); renderDiary(); renderWater(); renderRecents(); renderSummary(); renderDate(); }
 
 /* ---------- navigation ---------- */
-const SUBS = {home:'סקירת היום', diary:'יומן האכילה', prog:'המגמה שלך',
-              me:'היעד האישי', coach:'המתאמנים שלי'};
+const SUBS = {home:'סקירת היום', diary:'יומן האכילה', prog:'המגמה שלך', me:'היעד האישי'};
 function goto(scr){
   state.screen = scr;
-  ['home','diary','prog','me','coach'].forEach(s => { $('scr-'+s).hidden = (s !== scr); });
+  ['home','diary','prog','me'].forEach(s => { $('scr-'+s).hidden = (s !== scr); });
   document.querySelectorAll('.tab').forEach(b => b.setAttribute('aria-current', b.dataset.scr === scr ? 'page' : 'false'));
   $('dateBar').style.display = (scr === 'home' || scr === 'diary') ? '' : 'none';
   $('barSub').textContent = SUBS[scr];
   if (scr === 'prog') renderProgress();
-  if (scr === 'coach') refreshCoach();
-  if (scr !== 'coach') stopLive();
+  if (scr !== 'prog') stopLive();
   window.scrollTo({top:0});
 }
 document.querySelector('.tabbar').addEventListener('click', e => {
   const b = e.target.closest('.tab'); if (b) goto(b.dataset.scr);
 });
 document.addEventListener('click', e => {
-  const g = e.target.closest('[data-go]'); if (g) goto(g.dataset.go);
+  const g = e.target.closest('[data-go]'); if (!g) return;
+  if (g.dataset.go === 'coach'){ goto('prog'); progTab('coaching'); return; }
+  goto(g.dataset.go);
 });
 $('chart').addEventListener('click', e => {
   const c = e.target.closest('[data-day]'); if (!c) return;
@@ -2975,7 +2978,7 @@ function maybeOnboard(){
    שורות של מתאמן רק כשקיים קישור מאושר. הקוד כאן הוא הממשק,
    לא ההגנה — ביטול אישור סוגר את הגישה גם אם הקוד לא ידע על כך.
    ============================================================ */
-const APP_VERSION = 24;
+const APP_VERSION = 25;
 const USERNAME_RE = /^[a-z0-9._-]{3,20}$/i;
 let coachTimer = null;
 
@@ -3048,8 +3051,11 @@ function renderRoleUI(){
     [...$('roleSeg').children].forEach(b =>
       b.setAttribute('aria-pressed', String(b.dataset.v === state.me.role)));
   }
-  $('coachEntry').hidden = !(inn && isCoach());
-  $('reqBlock').hidden   = !(inn && !isCoach());
+  $('coachEntry').hidden  = !(inn && isCoach());
+  $('reqBlock').hidden    = !(inn && !isCoach());
+  $('tabCoaching').hidden = !(inn && isCoach());
+  /* אם התפקיד השתנה בזמן שהקטגוריה פתוחה — לא להשאיר מסך יתום */
+  if (!isCoach() && !$('prog-coaching').hidden) progTab('mine');
   if (inn && state.me){
     $('coachEntrySub').textContent =
       'מחובר כ־@' + state.me.username + '. חפש מתאמן לפי שם משתמש ובקש גישה ליומן שלו.';
@@ -3629,15 +3635,23 @@ $('planSave').addEventListener('click', async () => {
 /* ---------- צד המתאמן ---------- */
 let myLink = null, wkDay = new Date().getDay(), wkPlan = null, wkDone = [];
 
-$('progTabs').addEventListener('click', e => {
-  const b = e.target.closest('[data-t]'); if (!b) return;
-  const t = b.dataset.t;
-  [...e.currentTarget.children].forEach(x => x.setAttribute('aria-pressed', String(x === b)));
-  ['mine','workouts','friends'].forEach(k => { $('prog-' + k).hidden = (k !== t); });
+const PROG_TABS = ['mine','workouts','friends','coaching'];
+
+function progTab(t){
+  [...$('progTabs').children].forEach(x =>
+    x.setAttribute('aria-pressed', String(x.dataset.t === t)));
+  PROG_TABS.forEach(k => { $('prog-' + k).hidden = (k !== t); });
   if (t === 'workouts') loadMyWorkouts();
+  if (t === 'coaching') refreshCoach(); else stopLive();
+  window.scrollTo({top:0});
+}
+
+$('progTabs').addEventListener('click', e => {
+  const b = e.target.closest('[data-t]'); if (b) progTab(b.dataset.t);
 });
 
 async function loadMyWorkouts(){
+  refreshRequests();
   $('wkBody').innerHTML = '<div class="empty"><i class="spin"></i>טוען…</div>';
   if (!Cloud.signedIn()){
     $('wkBody').innerHTML = '<div class="empty">צריך להתחבר כדי לראות תוכנית.</div>';

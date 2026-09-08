@@ -276,9 +276,11 @@ option{background:#1B1F2B;color:var(--text)}
 .livegrid span{font-size:var(--t-micro);color:var(--mut)}
 
 /* ---------- tabs & plans ---------- */
-.segtabs{display:flex;gap:6px;margin-bottom:12px}
-.segtabs button{flex:1;background:var(--surface);border:1px solid var(--edge);color:var(--mut);
-  font:inherit;font-size:var(--t-small);padding:10px 4px;border-radius:999px;cursor:pointer}
+.segtabs{display:flex;gap:6px;margin-bottom:12px;overflow-x:auto;scrollbar-width:none;
+  -webkit-overflow-scrolling:touch}
+.segtabs::-webkit-scrollbar{display:none}
+.segtabs button{flex:1 0 auto;white-space:nowrap;background:var(--surface);border:1px solid var(--edge);
+  color:var(--mut);font:inherit;font-size:var(--t-small);padding:10px 14px;border-radius:999px;cursor:pointer}
 .segtabs button[aria-pressed="true"]{background:rgba(92,210,164,.15);color:var(--state);
   border-color:rgba(92,210,164,.3);font-weight:500}
 .daytabs{display:flex;gap:5px;padding:12px 16px;overflow-x:auto;scrollbar-width:none}
@@ -583,6 +585,7 @@ option{background:#1B1F2B;color:var(--text)}
         <button data-t="mine" aria-pressed="true">ההתקדמות שלי</button>
         <button data-t="workouts" aria-pressed="false">האימונים שלי</button>
         <button data-t="friends" aria-pressed="false">חברים</button>
+        <button data-t="coaching" id="tabCoaching" aria-pressed="false" hidden>המתאמנים שלי</button>
       </div>
 
       <div id="prog-mine">
@@ -614,7 +617,38 @@ option{background:#1B1F2B;color:var(--text)}
           <div class="bhead"><h2>השבוע האחרון</h2></div>
           <div id="wkHistory"></div>
         </div>
+
+        <div class="block" id="reqBlock" hidden>
+        <div class="bhead"><h2>בקשות מאמנים</h2><span id="reqCount"></span></div>
+        <div id="reqList"></div>
       </div>
+      </div>
+
+      <div id="prog-coaching" hidden>
+      <div class="block">
+        <div class="bhead"><h2>חיפוש מתאמן</h2></div>
+        <input id="coachQ" type="search" placeholder="שם משתמש או שם לתצוגה" autocomplete="off">
+        <ul class="results" id="coachResults"></ul>
+      </div>
+
+      <div class="block">
+        <div class="bhead"><h2>המתאמנים שלי</h2>
+          <a id="coachRefresh">רענון</a></div>
+        <div style="color:var(--mut);font-size:var(--t-micro);margin:-8px 0 10px"
+             id="coachStatus"></div>
+        <div id="coachList"></div>
+      </div>
+
+      <div class="block" id="liveBlock" hidden>
+        <div class="bhead"><h2 id="liveName">מתאמן</h2><span class="live" id="liveDot">חי</span></div>
+        <div id="liveBody"></div>
+        <div class="btnrow" style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+          <button class="btn" id="liveChat" hidden>פתיחת שיחה</button>
+          <button class="btn sec" id="livePlan" hidden>תוכנית אימונים</button>
+          <button class="btn sec" id="liveClose" style="grid-column:1/-1">סגירת התצוגה</button>
+        </div>
+      </div>
+          </div>
 
       <div id="prog-friends" hidden>
         <div class="block">
@@ -722,38 +756,7 @@ option{background:#1B1F2B;color:var(--text)}
            id="coachEntrySub">חפש מתאמן לפי שם משתמש ובקש גישה לצפייה ביומן שלו.</p>
       </div>
 
-      <div class="block" id="reqBlock" hidden>
-        <div class="bhead"><h2>בקשות מאמנים</h2><span id="reqCount"></span></div>
-        <div id="reqList"></div>
-      </div>
-
       <p class="legalnote"><span id="appVer">גרסה —</span><br>המספרים הם הערכה סטטיסטית ואינם ייעוץ תזונתי.<br>בלי חשבון הנתונים נשמרים במכשיר הזה בלבד.</p>
-    </section>
-    <!-- ============ COACH ============ -->
-    <section class="screen" id="scr-coach" hidden>
-      <div class="block">
-        <div class="bhead"><h2>חיפוש מתאמן</h2></div>
-        <input id="coachQ" type="search" placeholder="שם משתמש או שם לתצוגה" autocomplete="off">
-        <ul class="results" id="coachResults"></ul>
-      </div>
-
-      <div class="block">
-        <div class="bhead"><h2>המתאמנים שלי</h2>
-          <a id="coachRefresh">רענון</a></div>
-        <div style="color:var(--mut);font-size:var(--t-micro);margin:-8px 0 10px"
-             id="coachStatus"></div>
-        <div id="coachList"></div>
-      </div>
-
-      <div class="block" id="liveBlock" hidden>
-        <div class="bhead"><h2 id="liveName">מתאמן</h2><span class="live" id="liveDot">חי</span></div>
-        <div id="liveBody"></div>
-        <div class="btnrow" style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
-          <button class="btn" id="liveChat" hidden>פתיחת שיחה</button>
-          <button class="btn sec" id="livePlan" hidden>תוכנית אימונים</button>
-          <button class="btn sec" id="liveClose" style="grid-column:1/-1">סגירת התצוגה</button>
-        </div>
-      </div>
     </section>
   </main>
 
