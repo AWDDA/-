@@ -341,3 +341,39 @@ drop policy if exists "trainee updates diet logs" on public.diet_logs;
 create policy "trainee updates diet logs" on public.diet_logs
   for update using (auth.uid() = trainee_id) with check (auth.uid() = trainee_id);
 
+
+-- ============================================================
+-- 10. מאגר ברקודים משותף
+-- ============================================================
+-- הכיסוי של Open Food Facts בישראל דליל. הטבלה הזאת גדלה מהשימוש:
+-- מוצר שמשתמש אחד הזין ידנית זמין מיד לכל השאר.
+create table if not exists public.barcodes (
+  code        text primary key,
+  name        text not null,
+  kcal        numeric not null,
+  protein     numeric default 0,
+  carbs       numeric default 0,
+  fat         numeric default 0,
+  unit_label  text,
+  unit_grams  numeric,
+  created_by  uuid references auth.users on delete set null,
+  created_at  timestamptz not null default now(),
+  updated_at  timestamptz not null default now()
+);
+
+alter table public.barcodes enable row level security;
+
+-- קריאה לכל מי שמחובר: זו כל מטרת השיתוף
+drop policy if exists "anyone signed in reads barcodes" on public.barcodes;
+create policy "anyone signed in reads barcodes" on public.barcodes
+  for select using (auth.uid() is not null);
+
+-- כתיבה בשמך בלבד
+drop policy if exists "signed in adds barcode" on public.barcodes;
+create policy "signed in adds barcode" on public.barcodes
+  for insert with check (auth.uid() = created_by);
+
+-- תיקון רק של מי שהזין. כך משתמש אחד לא יכול לקלקל נתון של אחר.
+drop policy if exists "owner fixes barcode" on public.barcodes;
+create policy "owner fixes barcode" on public.barcodes
+  for update using (auth.uid() = created_by) with check (auth.uid() = created_by);

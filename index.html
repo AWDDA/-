@@ -850,7 +850,9 @@ option{background:#1B1F2B;color:var(--text)}
           <div class="field"><label for="nP">חלבון / 100 ג׳</label><input id="nP" type="number" min="0" step="0.1" inputmode="decimal"></div>
           <div class="field"><label for="nF">שומן / 100 ג׳</label><input id="nF" type="number" min="0" step="0.1" inputmode="decimal"></div>
         </div>
-        <button class="btn" id="saveNew" style="margin-top:12px">שמירה למאגר</button>
+        <button class="btn sec" id="nLabel" style="margin-top:12px">📷 צילום תווית תזונה</button>
+        <div id="nLabelMsg" class="empty" style="margin-top:8px"></div>
+        <button class="btn" id="saveNew" style="margin-top:10px">שמירה למאגר</button>
       </div>
 
       <div id="paneEx" hidden>
@@ -964,6 +966,7 @@ option{background:#1B1F2B;color:var(--text)}
     <button id="chatSend" aria-label="שליחה">➤</button>
   </div>
   <input type="file" id="chatFile" accept="image/*" hidden>
+<input type="file" id="nLabelFile" accept="image/*" capture="environment" hidden>
 </div>
 
 <div class="chat picker" id="pickPanel" hidden>

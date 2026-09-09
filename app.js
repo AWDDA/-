@@ -571,9 +571,18 @@ $('saveNew').addEventListener('click', () => {
   if (!(k >= 0)) { toast('צריך להזין קלוריות ל‑100 גרם'); return; }
   const nf2 = {n, g: pendingBarcode ? 'ברקוד ' + pendingBarcode : 'מאכל שלי', k,
     p:parseFloat($('nP').value)||0, c:parseFloat($('nC').value)||0, f:parseFloat($('nF').value)||0};
-  if (pendingBarcode){ nf2.bc = pendingBarcode; pendingBarcode = null; }
+  const bc = pendingBarcode;
+  if (bc){ nf2.bc = bc; pendingBarcode = null; }
   state.custom.unshift(nf2);
   saveCustom();
+
+  /* תרומה למאגר המשותף: מה שהזנת פעם אחת יעבוד לכולם */
+  if (bc && Cloud.ready() && Cloud.signedIn()){
+    Cloud.shareBarcode({code:bc, name:n, kcal:k,
+      protein:nf2.p, carbs:nf2.c, fat:nf2.f})
+      .then(() => toast('נשמר, ונתרם למאגר המשותף'))
+      .catch(() => {});
+  }
   ['nName','nKcal','nP','nC','nF'].forEach(id => { $(id).value = ''; });
   showTab('search'); $('q').value = n; renderResults(n); pickFood(n);
   toast('המאכל נשמר למאגר');
@@ -872,6 +881,12 @@ async function onBarcode(code){
     const food = res.food;
     food.bc = code;
     if (!state.custom.some(f => f.n === food.n)){ state.custom.unshift(food); saveCustom(); }
+    /* נמצא ב-Open Food Facts אבל עוד לא במאגר המשותף — מעלים אותו */
+    if (!res.shared && Cloud.ready() && Cloud.signedIn()){
+      Cloud.shareBarcode({code, name:food.n, kcal:food.k, protein:food.p,
+        carbs:food.c, fat:food.f,
+        unit_label:food.u && food.u[0], unit_grams:food.u && food.u[1]}).catch(() => {});
+    }
     openSheet('search');
     pickFood(food.n);
     return;
@@ -901,6 +916,22 @@ function codeVariants(code){
 }
 
 async function lookupBarcode(code){
+  /* המאגר המשותף לפני Open Food Facts: הוא ישראלי, מדויק יותר,
+     וגדל מהשימוש של כל מי שמחובר. */
+  if (Cloud.ready() && Cloud.signedIn()){
+    for (const c of codeVariants(code)){
+      try {
+        const b = await Cloud.findBarcode(c);
+        if (b){
+          const food = {n:b.name, g:'ברקוד ' + c, k:+b.kcal,
+                        p:+b.protein || 0, c:+b.carbs || 0, f:+b.fat || 0, bc:c};
+          if (b.unit_grams > 0) food.u = [b.unit_label || 'מנה', +b.unit_grams];
+          return {food, shared:true};
+        }
+      } catch(e){}
+    }
+  }
+
   const off = await lookupOFF(code);
   if (off) return {food: off};
 
@@ -977,6 +1008,40 @@ async function downscale(file, max){
   return cv.toDataURL('image/jpeg', 0.82).split(',')[1];
 }
 
+/* קריאה אחת למודל הראייה, משותפת לצילום מנה ולקריאת תווית */
+async function visionCall(b64, prompt){
+  const endpoint = state.apiUrl || 'https://api.anthropic.com/v1/messages';
+  const r = await fetch(endpoint, {
+    method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({
+      model:'claude-sonnet-4-6',
+      max_tokens:1000,
+      messages:[{role:'user', content:[
+        {type:'image', source:{type:'base64', media_type:'image/jpeg', data:b64}},
+        {type:'text', text: prompt}
+      ]}]
+    })
+  });
+  if (!r.ok) throw new Error('HTTP ' + r.status);
+  return r.json();
+}
+
+function visionJSON(data){
+  let txt = '';
+  try { txt = (data.content || []).filter(b => b.type === 'text').map(b => b.text).join('\n'); }
+  catch(e){}
+  try { return JSON.parse(txt.replace(/```json|```/g, '').trim()); }
+  catch(e){ return null; }
+}
+
+const LABEL_PROMPT =
+  'זו תווית ערך תזונתי של מוצר מזון. חלץ את הערכים ל-100 גרם. ' +
+  'אם התווית מציגה ערכים למנה בלבד, המר ל-100 גרם לפי גודל המנה הרשום. ' +
+  'החזר JSON בלבד, בלי טקסט מסביב: ' +
+  '{"name":"שם המוצר אם מופיע","kcal":0,"protein":0,"carbs":0,"fat":0}. ' +
+  'אם לא מדובר בתווית תזונה, החזר {"kcal":null}.';
+
 const MEAL_PROMPT =
   'זהה את המאכלים בתמונה והערך את הכמות והערכים התזונתיים של כל אחד. ' +
   'החזר JSON בלבד, בלי טקסט מסביב ובלי גדרות markdown, במבנה: ' +
@@ -990,28 +1055,9 @@ async function analyzeMeal(file){
   try { b64 = await downscale(file, 1024); }
   catch(e){ box.innerHTML = '<div style="color:var(--bad);font-size:13.5px">לא הצלחתי לקרוא את התמונה</div>'; return; }
 
-  const payload = {
-    model: 'claude-sonnet-4-6',
-    max_tokens: 1000,
-    messages: [{
-      role: 'user',
-      content: [
-        {type:'image', source:{type:'base64', media_type:'image/jpeg', data:b64}},
-        {type:'text', text: MEAL_PROMPT}
-      ]
-    }]
-  };
-
-  const endpoint = state.apiUrl || 'https://api.anthropic.com/v1/messages';
   let data;
   try {
-    const r = await fetch(endpoint, {
-      method:'POST',
-      headers:{'Content-Type':'application/json'},
-      body: JSON.stringify(payload)
-    });
-    if (!r.ok) throw new Error('HTTP ' + r.status);
-    data = await r.json();
+    data = await visionCall(b64, MEAL_PROMPT);
   } catch(e){
     box.innerHTML = '<div style="font-size:13.5px;color:var(--mut);line-height:1.6">' +
       '<b style="color:var(--bad)">זיהוי המנה לא זמין.</b><br>' +
@@ -1021,13 +1067,7 @@ async function analyzeMeal(file){
     return;
   }
 
-  let txt = '';
-  try {
-    txt = (data.content || []).filter(b => b.type === 'text').map(b => b.text).join('\n');
-  } catch(e){}
-  let parsed = null;
-  try { parsed = JSON.parse(txt.replace(/```json|```/g, '').trim()); } catch(e){}
-
+  const parsed = visionJSON(data);
   if (!parsed || !parsed.items || !parsed.items.length){
     box.innerHTML = '<div style="color:var(--mut);font-size:13.5px">לא זיהיתי אוכל בתמונה. נסה זווית אחרת או תאורה טובה יותר.</div>';
     return;
@@ -1428,7 +1468,7 @@ function maybeOnboard(){
    שורות של מתאמן רק כשקיים קישור מאושר. הקוד כאן הוא הממשק,
    לא ההגנה — ביטול אישור סוגר את הגישה גם אם הקוד לא ידע על כך.
    ============================================================ */
-const APP_VERSION = 30;
+const APP_VERSION = 32;
 const USERNAME_RE = /^[a-z0-9._-]{3,20}$/i;
 let coachTimer = null;
 
@@ -1940,6 +1980,30 @@ $('chatFile').addEventListener('change', async e => {
     b.className = 'retry';
     b.textContent = m;
     el.appendChild(b);
+  }
+});
+
+/* ---------- קריאת תווית תזונה ---------- */
+$('nLabel').addEventListener('click', () => $('nLabelFile').click());
+$('nLabelFile').addEventListener('change', async e => {
+  const file = e.target.files && e.target.files[0];
+  e.target.value = '';
+  if (!file) return;
+  const msg = $('nLabelMsg');
+  msg.innerHTML = '<i class="spin"></i>קורא את התווית…';
+  try {
+    const b64 = await downscale(file, 1400);
+    const v = visionJSON(await visionCall(b64, LABEL_PROMPT));
+    if (!v || v.kcal == null){ msg.textContent = 'לא זיהיתי תווית תזונה בתמונה.'; return; }
+    if (v.name && !$('nName').value) $('nName').value = v.name;
+    $('nKcal').value = Math.round(v.kcal);
+    if (v.protein != null) $('nP').value = round(v.protein, 1);
+    if (v.carbs   != null) $('nC').value = round(v.carbs, 1);
+    if (v.fat     != null) $('nF').value = round(v.fat, 1);
+    msg.textContent = 'הערכים מולאו מהתווית. בדוק אותם לפני שמירה.';
+  } catch(err){
+    msg.innerHTML = '<b style="color:var(--bad)">קריאת תווית לא זמינה.</b> ' +
+      'היא דורשת את שרת הזיהוי (worker.js) שמוגדר במסך הפרופיל.';
   }
 });
 

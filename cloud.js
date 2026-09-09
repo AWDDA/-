@@ -405,6 +405,27 @@ const Cloud = (() => {
     });
   }
 
+  /* ---------- מאגר ברקודים משותף ---------- */
+  async function findBarcode(code){
+    const r = await rest('barcodes?code=eq.' + encodeURIComponent(code) +
+                         '&select=code,name,kcal,protein,carbs,fat,unit_label,unit_grams');
+    return (r && r[0]) || null;
+  }
+
+  async function shareBarcode(b){
+    if (!signedIn()) return;
+    await rest('barcodes?on_conflict=code', {
+      method: 'POST',
+      headers: {Prefer: 'resolution=ignore-duplicates,return=minimal'},
+      body: JSON.stringify({
+        code: b.code, name: b.name, kcal: b.kcal,
+        protein: b.protein || 0, carbs: b.carbs || 0, fat: b.fat || 0,
+        unit_label: b.unit_label || null, unit_grams: b.unit_grams || null,
+        created_by: user().id
+      })
+    });
+  }
+
   /* ---------- אחסון תמונות ---------- */
   async function storage(path, opts){
     if (!signedIn()) throw new Error('לא מחובר');
@@ -486,7 +507,7 @@ const Cloud = (() => {
     myProfile, saveProfile, usernameTaken, searchUsers,
     coachLinks, traineeLinks, requestLink, setLinkStatus,
     profilesByIds, pullFor, messages, sendMessage, setRole, diagnose,
-    uploadImage, imageUrl,
+    uploadImage, imageUrl, findBarcode, shareBarcode,
     getPlan, savePlan, getWorkoutLog, setWorkoutLog, recentWorkoutLogs,
     getMealPlan, saveMealPlan, getDietLog, setDietLog,
     pending: () => Object.keys(queue).length,
