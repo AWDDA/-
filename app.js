@@ -388,7 +388,7 @@ function goto(scr){
   document.querySelectorAll('.tab').forEach(b => b.setAttribute('aria-current', b.dataset.scr === scr ? 'page' : 'false'));
   $('dateBar').style.display = (scr === 'home' || scr === 'diary') ? '' : 'none';
   $('barSub').textContent = SUBS[scr];
-  if (scr === 'prog') renderProgress();
+  if (scr === 'prog'){ renderProgress(); if (!$('prog-mine').hidden) loadMyDiet(); }
   if (scr !== 'prog') stopLive();
   window.scrollTo({top:0});
 }
@@ -1351,7 +1351,7 @@ function maybeOnboard(){
    שורות של מתאמן רק כשקיים קישור מאושר. הקוד כאן הוא הממשק,
    לא ההגנה — ביטול אישור סוגר את הגישה גם אם הקוד לא ידע על כך.
    ============================================================ */
-const APP_VERSION = 25;
+const APP_VERSION = 26;
 const USERNAME_RE = /^[a-z0-9._-]{3,20}$/i;
 let coachTimer = null;
 
@@ -1587,6 +1587,8 @@ async function openLive(traineeId){
   $('liveChat').onclick = () => openChat(link && link.id, personLabel(p));
   $('livePlan').hidden = !link;
   $('livePlan').onclick = () => openPlan(link && link.id, traineeId, personLabel(p));
+  $('liveDiet').hidden = !link;
+  $('liveDiet').onclick = () => openDiet(link && link.id, traineeId, personLabel(p));
   $('liveBlock').hidden = false;
   $('liveBody').innerHTML = '<div class="empty"><i class="spin"></i>טוען…</div>';
   await drawLive();
@@ -2014,6 +2016,8 @@ function progTab(t){
   [...$('progTabs').children].forEach(x =>
     x.setAttribute('aria-pressed', String(x.dataset.t === t)));
   PROG_TABS.forEach(k => { $('prog-' + k).hidden = (k !== t); });
+  if (t === 'mine') loadMyDiet();
+  if (t === 'mine') loadMyDiet();
   if (t === 'workouts') loadMyWorkouts();
   if (t === 'coaching') refreshCoach(); else stopLive();
   window.scrollTo({top:0});
@@ -2319,6 +2323,247 @@ document.addEventListener('visibilitychange', () => {
     pausedTimers = null;
   }
 });
+
+
+/* ============================================================
+   תפריט תזונה
+   מבנה מקביל לתוכנית האימונים: המאמן בונה, המתאמן מסמן.
+   הפריטים נבחרים ממאגר המאכלים הקיים, אז הערכים מחושבים ולא מוקלדים.
+   ============================================================ */
+const DIET_MEALS = ['ארוחת בוקר','ארוחת צהריים','ארוחת ערב','ביניים'];
+let dietLink = null, dietTrainee = null, dietDay = 0, dietData = {}, dtPick = null;
+
+function emptyDiet(){ const p = {}; DAY_KEYS.forEach(k => { p[k] = []; }); return p; }
+function normalizeDiet(p){
+  const out = emptyDiet();
+  if (p && typeof p === 'object'){
+    DAY_KEYS.forEach(k => { if (Array.isArray(p[k])) out[k] = p[k]; });
+  }
+  return out;
+}
+function dietTotals(list){
+  const t = {k:0,p:0,c:0,f:0};
+  list.forEach(i => { t.k += i.k||0; t.p += i.p||0; t.c += i.c||0; t.f += i.f||0; });
+  return t;
+}
+function dietKey(i){ return (i.t || '') + '|' + (i.n || '') + '|' + (i.q || ''); }
+
+/* ---------- צד המאמן ---------- */
+async function openDiet(linkId, traineeId, name){
+  dietLink = linkId; dietTrainee = traineeId; dietDay = new Date().getDay(); dtPick = null;
+  $('dietWith').textContent = 'תפריט · ' + (name || '');
+  $('dtMeal').innerHTML = DIET_MEALS.map(m => '<option>' + m + '</option>').join('');
+  $('dtQ').value = ''; $('dtResults').hidden = true; $('dtPicked').hidden = true;
+  $('dietList').innerHTML = '<div class="empty"><i class="spin"></i>טוען…</div>';
+  const panel = $('dietPanel');
+  if (panel.nextElementSibling) document.body.appendChild(panel);
+  panel.hidden = false;
+  document.body.style.overflow = 'hidden';
+  try {
+    const row = await Cloud.getMealPlan(linkId);
+    dietData = normalizeDiet(row && row.plan);
+  } catch(e){ dietData = emptyDiet(); }
+  drawDietEditor();
+}
+function closeDiet(){
+  dietLink = null;
+  $('dietPanel').hidden = true;
+  if ($('planPanel').hidden && $('chatPanel').hidden) document.body.style.overflow = '';
+}
+$('dietClose').addEventListener('click', closeDiet);
+
+function drawDietEditor(){
+  const counts = {};
+  DAY_KEYS.forEach(k => { counts[k] = dietData[k].length; });
+  renderDayTabs($('dietDays'), dietDay, counts, d => { dietDay = d; drawDietEditor(); });
+
+  const list = dietData[DAY_KEYS[dietDay]];
+  const t = dietTotals(list);
+  let html = '<div class="bhead" style="margin:14px 0 4px"><h2>יום ' + DAY_HE[dietDay] + '</h2>' +
+             '<span>' + (list.length ? list.length + ' פריטים' : 'ריק') + '</span></div>';
+
+  if (!list.length){
+    html += '<div class="empty">אין פריטים ליום הזה. הוסף למטה.</div>';
+  } else {
+    DIET_MEALS.forEach(meal => {
+      const items = list.map((x, i) => ({x, i})).filter(o => o.x.t === meal);
+      if (!items.length) return;
+      const mt = dietTotals(items.map(o => o.x));
+      html += '<div class="mealhead">' + meal + '<span>' + nf(mt.k) + ' קק״ל</span></div>';
+      html += items.map(o =>
+        '<div class="ex"><div class="info"><b>' + esc(o.x.n) + '</b><span>' + esc(o.x.q) +
+        ' · ' + Math.round(o.x.k) + ' קק״ל</span></div>' +
+        '<button class="del" data-drm="' + o.i + '" aria-label="מחיקה">✕</button></div>').join('');
+    });
+    html += '<div class="dtot">' +
+      '<div><b>' + nf(t.k) + '</b><span>קק״ל</span></div>' +
+      '<div><b>' + Math.round(t.p) + '</b><span>חלבון</span></div>' +
+      '<div><b>' + Math.round(t.c) + '</b><span>פחמימות</span></div>' +
+      '<div><b>' + Math.round(t.f) + '</b><span>שומן</span></div></div>';
+  }
+  $('dietList').innerHTML = html;
+}
+
+$('dietList').addEventListener('click', e => {
+  const b = e.target.closest('[data-drm]'); if (!b) return;
+  dietData[DAY_KEYS[dietDay]].splice(+b.dataset.drm, 1);
+  drawDietEditor();
+});
+
+/* חיפוש במאגר המאכלים הקיים — אותו מקור שמזין את יומן האכילה */
+$('dtQ').addEventListener('input', () => {
+  const q = $('dtQ').value.trim();
+  const box = $('dtResults');
+  if (q.length < 2){ box.hidden = true; return; }
+  const rows = allFoods().filter(f => f.n.indexOf(q) > -1 || (f.g && f.g.indexOf(q) > -1)).slice(0, 8);
+  if (!rows.length){ box.hidden = true; return; }
+  box.innerHTML = rows.map(f =>
+    '<button type="button" data-fn="' + esc(f.n) + '"><b>' + esc(f.n) + '</b>' +
+    '<span>' + f.k + ' קק״ל / 100 ג׳</span></button>').join('');
+  box.hidden = false;
+});
+
+$('dtResults').addEventListener('click', e => {
+  const b = e.target.closest('[data-fn]'); if (!b) return;
+  const f = allFoods().find(x => x.n === b.dataset.fn); if (!f) return;
+  dtPick = f;
+  $('dtQ').value = f.n;
+  $('dtResults').hidden = true;
+  const opts = ['<option value="1">גרם</option>'];
+  if (f.u) opts.push('<option value="' + f.u[1] + '" selected>' + esc(f.u[0]) + '</option>');
+  $('dtUnit').innerHTML = opts.join('');
+  $('dtAmount').value = f.u ? 1 : 100;
+  $('dtPicked').hidden = false;
+  dtPreview();
+});
+
+function dtValues(){
+  if (!dtPick) return null;
+  const amount = parseFloat($('dtAmount').value) || 0;
+  const per = parseFloat($('dtUnit').value) || 1;
+  const grams = amount * per;
+  const label = per === 1 ? Math.round(grams) + ' גרם'
+    : amount + ' × ' + $('dtUnit').options[$('dtUnit').selectedIndex].text;
+  return {t:$('dtMeal').value, n:dtPick.n, q:label,
+          k:dtPick.k*grams/100, p:dtPick.p*grams/100,
+          c:dtPick.c*grams/100, f:dtPick.f*grams/100};
+}
+function dtPreview(){
+  const v = dtValues(); if (!v) return;
+  $('dtPrev').innerHTML =
+    '<div>קלוריות<b>' + Math.round(v.k) + '</b></div>' +
+    '<div>חלבון<b>' + round(v.p,1) + '</b></div>' +
+    '<div>פחמימות<b>' + round(v.c,1) + '</b></div>' +
+    '<div>שומן<b>' + round(v.f,1) + '</b></div>';
+}
+$('dtAmount').addEventListener('input', dtPreview);
+$('dtUnit').addEventListener('change', () => {
+  $('dtAmount').value = (parseFloat($('dtUnit').value) === 1) ? 100 : 1;
+  dtPreview();
+});
+
+$('dtAdd').addEventListener('click', () => {
+  const v = dtValues();
+  if (!v){ toast('בחר מאכל מהחיפוש'); return; }
+  dietData[DAY_KEYS[dietDay]].push(v);
+  dtPick = null;
+  $('dtQ').value = ''; $('dtPicked').hidden = true; $('dtPrev').innerHTML = '';
+  drawDietEditor();
+});
+
+$('dietCopy').addEventListener('click', () => {
+  const from = DAY_KEYS[dietDay];
+  if (!dietData[from].length){ toast('אין מה להעתיק מהיום הזה'); return; }
+  const t = parseInt(prompt('להעתיק ליום (1=ראשון … 7=שבת):'), 10);
+  if (!(t >= 1 && t <= 7)) return;
+  dietData[DAY_KEYS[t-1]] = dietData[from].map(x => Object.assign({}, x));
+  dietDay = t - 1;
+  drawDietEditor();
+  toast('הועתק ליום ' + DAY_HE[t-1]);
+});
+
+$('dietSave').addEventListener('click', async () => {
+  const btn = $('dietSave'), label = btn.textContent;
+  btn.textContent = 'שומר…'; btn.disabled = true;
+  try {
+    await Cloud.saveMealPlan(dietLink, dietTrainee, dietData);
+    toast('התפריט נשמר');
+    closeDiet();
+  } catch(e){ toast(String((e && e.message) || e)); }
+  finally { btn.textContent = label; btn.disabled = false; }
+});
+
+/* ---------- צד המתאמן ---------- */
+let myDietLink = null, myDietDay = new Date().getDay(), myDiet = null, myDietDone = [];
+
+async function loadMyDiet(){
+  if (!Cloud.signedIn()){ $('dietBlock').hidden = true; return; }
+  try {
+    const links = await Cloud.traineeLinks();
+    const appr = links.filter(l => l.status === 'approved');
+    if (!appr.length){ $('dietBlock').hidden = true; return; }
+    myDietLink = appr[0];
+    const row = await Cloud.getMealPlan(myDietLink.id);
+    myDiet = normalizeDiet(row && row.plan);
+    const any = DAY_KEYS.some(k => myDiet[k].length);
+    if (!any){ $('dietBlock').hidden = true; return; }
+
+    const names = await Cloud.profilesByIds([myDietLink.coach_id]).catch(() => ({}));
+    const c = names[myDietLink.coach_id];
+    $('dietFrom').textContent = c ? 'מאת ' + personLabel(c) : '';
+    const log = await Cloud.getDietLog(myDietLink.id, todayKey());
+    myDietDone = (log && Array.isArray(log.done)) ? log.done : [];
+    myDietDay = new Date().getDay();
+    $('dietBlock').hidden = false;
+    drawMyDiet();
+  } catch(e){ $('dietBlock').hidden = true; }
+}
+
+function drawMyDiet(){
+  const counts = {};
+  DAY_KEYS.forEach(k => { counts[k] = myDiet[k].length; });
+  renderDayTabs($('myDietDays'), myDietDay, counts, d => { myDietDay = d; drawMyDiet(); });
+
+  const list = myDiet[DAY_KEYS[myDietDay]];
+  const isToday = myDietDay === new Date().getDay();
+  if (!list.length){
+    $('myDietBody').innerHTML = '<div class="empty">אין תפריט ליום ' + DAY_HE[myDietDay] + '.</div>';
+    return;
+  }
+  let html = '';
+  DIET_MEALS.forEach(meal => {
+    const items = list.filter(x => x.t === meal);
+    if (!items.length) return;
+    const mt = dietTotals(items);
+    html += '<div class="mealhead">' + meal + '<span>' + nf(mt.k) + ' קק״ל</span></div>';
+    html += items.map(x => {
+      const k = dietKey(x);
+      return '<label class="ex">' +
+        (isToday ? '<input type="checkbox" data-dk="' + esc(k) + '"' +
+                   (myDietDone.indexOf(k) > -1 ? ' checked' : '') + '>' : '') +
+        '<div class="info"><b>' + esc(x.n) + '</b><span>' + esc(x.q) + ' · ' +
+        Math.round(x.k) + ' קק״ל</span></div></label>';
+    }).join('');
+  });
+  const t = dietTotals(list);
+  html += '<div class="dtot">' +
+    '<div><b>' + nf(t.k) + '</b><span>קק״ל</span></div>' +
+    '<div><b>' + Math.round(t.p) + '</b><span>חלבון</span></div>' +
+    '<div><b>' + Math.round(t.c) + '</b><span>פחמימות</span></div>' +
+    '<div><b>' + Math.round(t.f) + '</b><span>שומן</span></div></div>';
+  if (!isToday) html += '<div class="empty" style="margin-top:12px">סימון אפשרי ביום עצמו.</div>';
+  $('myDietBody').innerHTML = html;
+}
+
+$('myDietBody').addEventListener('change', async e => {
+  const cb = e.target.closest('[data-dk]'); if (!cb || !myDietLink) return;
+  const k = cb.dataset.dk;
+  if (cb.checked){ if (myDietDone.indexOf(k) === -1) myDietDone.push(k); }
+  else myDietDone = myDietDone.filter(x => x !== k);
+  try { await Cloud.setDietLog(myDietLink.id, todayKey(), myDietDone); }
+  catch(err){ toast(String((err && err.message) || err)); cb.checked = !cb.checked; }
+});
+
 
 /* ---------- toast ---------- */
 let toastT;

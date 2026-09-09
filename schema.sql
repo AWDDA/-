@@ -275,3 +275,69 @@ create policy "trainee writes logs" on public.workout_logs
 drop policy if exists "trainee updates logs" on public.workout_logs;
 create policy "trainee updates logs" on public.workout_logs
   for update using (auth.uid() = trainee_id) with check (auth.uid() = trainee_id);
+
+-- ============================================================
+-- 9. תפריטי תזונה
+-- ============================================================
+-- plan הוא jsonb במבנה:
+--   {"sun":[{"t":"ארוחת בוקר","n":"קוטג׳ 5%","q":"200 גרם","k":206,"p":22,"c":7,"f":10}], ...}
+create table if not exists public.meal_plans (
+  link_id    uuid primary key references public.coach_links(id) on delete cascade,
+  coach_id   uuid not null references auth.users on delete cascade,
+  trainee_id uuid not null references auth.users on delete cascade,
+  plan       jsonb not null default '{}'::jsonb,
+  updated_at timestamptz not null default now()
+);
+
+alter table public.meal_plans enable row level security;
+
+drop policy if exists "link members read meal plan" on public.meal_plans;
+create policy "link members read meal plan" on public.meal_plans
+  for select using (auth.uid() = coach_id or auth.uid() = trainee_id);
+
+drop policy if exists "coach writes meal plan" on public.meal_plans;
+create policy "coach writes meal plan" on public.meal_plans
+  for insert with check (
+    auth.uid() = coach_id
+    and exists (select 1 from public.coach_links l
+                where l.id = link_id and l.status = 'approved'
+                  and l.coach_id = auth.uid() and l.trainee_id = meal_plans.trainee_id)
+  );
+
+drop policy if exists "coach updates meal plan" on public.meal_plans;
+create policy "coach updates meal plan" on public.meal_plans
+  for update using (auth.uid() = coach_id) with check (auth.uid() = coach_id);
+
+-- ============================================================
+-- 10. סימון עמידה בתפריט
+-- ============================================================
+create table if not exists public.diet_logs (
+  id         uuid primary key default gen_random_uuid(),
+  link_id    uuid not null references public.coach_links(id) on delete cascade,
+  trainee_id uuid not null references auth.users on delete cascade,
+  log_date   date not null,
+  done       jsonb not null default '[]'::jsonb,
+  updated_at timestamptz not null default now(),
+  unique (link_id, log_date)
+);
+
+create index if not exists diet_logs_link_idx on public.diet_logs (link_id, log_date desc);
+
+alter table public.diet_logs enable row level security;
+
+drop policy if exists "link members read diet logs" on public.diet_logs;
+create policy "link members read diet logs" on public.diet_logs
+  for select using (
+    exists (select 1 from public.coach_links l
+            where l.id = link_id and (l.coach_id = auth.uid() or l.trainee_id = auth.uid()))
+  );
+
+-- הסימון שייך למתאמן, בדיוק כמו ביומן האימונים
+drop policy if exists "trainee writes diet logs" on public.diet_logs;
+create policy "trainee writes diet logs" on public.diet_logs
+  for insert with check (auth.uid() = trainee_id);
+
+drop policy if exists "trainee updates diet logs" on public.diet_logs;
+create policy "trainee updates diet logs" on public.diet_logs
+  for update using (auth.uid() = trainee_id) with check (auth.uid() = trainee_id);
+

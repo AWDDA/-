@@ -312,6 +312,40 @@ option{background:#1B1F2B;color:var(--text)}
 .hist i.ok{background:rgba(92,210,164,.28);border-color:rgba(92,210,164,.45)}
 .hist span{font-size:var(--t-micro);color:var(--mut)}
 
+.suggest{margin-top:8px;background:var(--surface-2);border:1px solid var(--edge);
+  border-radius:var(--r-sm);overflow:hidden}
+.suggest button{width:100%;display:flex;align-items:center;gap:10px;background:none;border:0;
+  color:var(--text);font:inherit;text-align:start;padding:11px 13px;cursor:pointer}
+.suggest button + button{border-top:1px solid var(--edge)}
+.suggest button:active{background:rgba(92,210,164,.12)}
+.suggest b{font-size:var(--t-small);font-weight:500}
+.suggest span{color:var(--mut);font-size:var(--t-micro);margin-inline-start:auto}
+.mealhead{display:flex;align-items:baseline;justify-content:space-between;gap:10px;
+  margin:16px 0 4px;color:var(--state);font-size:var(--t-small);font-weight:600}
+.mealhead span{color:var(--mut);font-weight:400;font-variant-numeric:tabular-nums}
+.dtot{display:flex;gap:1px;background:var(--edge);border-radius:var(--r-sm);overflow:hidden;margin-top:16px}
+.dtot div{flex:1;background:rgba(255,255,255,.03);padding:11px 4px;text-align:center}
+.dtot b{display:block;font-size:var(--t-h3);font-weight:500;font-variant-numeric:tabular-nums}
+.dtot span{font-size:var(--t-micro);color:var(--mut)}
+
+.suggest{margin-top:6px;background:var(--surface-2);border:1px solid var(--edge);
+  border-radius:var(--r-sm);overflow:hidden;max-height:210px;overflow-y:auto}
+.suggest button{width:100%;display:flex;align-items:center;gap:10px;background:none;border:0;
+  color:var(--text);font:inherit;text-align:start;padding:11px 12px;cursor:pointer}
+.suggest button + button{border-top:1px solid var(--edge)}
+.suggest button:active{background:rgba(92,210,164,.12)}
+.suggest b{font-size:var(--t-small);font-weight:500}
+.suggest span{color:var(--mut);font-size:var(--t-micro);margin-inline-start:auto;white-space:nowrap}
+.mealsec{margin-top:16px}
+.mealsec .bhead{margin-bottom:6px}
+.mealsec .bhead h2{font-size:var(--t-lead)}
+.mi{display:flex;align-items:center;gap:12px;padding:10px 0}
+.mi + .mi{border-top:1px solid var(--edge)}
+.mi .t{flex:1;min-width:0}
+.mi .t b{display:block;font-size:var(--t-body);font-weight:400}
+.mi .t span{color:var(--mut2);font-size:var(--t-micro)}
+.mi .k{font-weight:500;font-variant-numeric:tabular-nums;font-size:var(--t-small)}
+
 /* ---------- exercise picker ---------- */
 .pickbtn{width:100%;display:flex;align-items:center;gap:10px;
   background:rgba(255,255,255,.05);border:1px solid var(--edge);color:var(--text);
@@ -589,6 +623,11 @@ option{background:#1B1F2B;color:var(--text)}
       </div>
 
       <div id="prog-mine">
+      <div class="block" id="dietBlock" hidden>
+        <div class="bhead"><h2>התפריט שלי</h2><span id="dietFrom"></span></div>
+        <div class="daytabs" id="myDietDays"></div>
+        <div id="myDietBody"></div>
+      </div>
       <div class="block">
         <div class="bhead"><h2>7 הימים האחרונים</h2><span style="font-size:12px;color:var(--mut)">הקש על יום</span></div>
         <div class="chart" id="chart"></div>
@@ -645,6 +684,7 @@ option{background:#1B1F2B;color:var(--text)}
         <div class="btnrow" style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
           <button class="btn" id="liveChat" hidden>פתיחת שיחה</button>
           <button class="btn sec" id="livePlan" hidden>תוכנית אימונים</button>
+          <button class="btn sec" id="liveDiet" hidden style="grid-column:1/-1">תפריט תזונה</button>
           <button class="btn sec" id="liveClose" style="grid-column:1/-1">סגירת התצוגה</button>
         </div>
       </div>
@@ -955,6 +995,35 @@ option{background:#1B1F2B;color:var(--text)}
         <input id="cxNote" placeholder="מה חשוב לזכור בביצוע"></div>
       <button class="btn" id="cxSave" style="margin-top:12px">שמירה למאגר שלי</button>
       <button class="btn sec" id="cxCancel" style="margin-top:8px">ביטול</button>
+    </div>
+  </div>
+</div>
+
+<div class="chat" id="dietPanel" hidden>
+  <div class="chatbar">
+    <button class="mini" id="dietClose">סגירה</button>
+    <b id="dietWith">תפריט תזונה</b>
+    <button class="mini go" id="dietSave">שמירה</button>
+  </div>
+  <div class="daytabs" id="dietDays"></div>
+  <div class="planbody">
+    <div id="dietList"></div>
+    <div class="planadd">
+      <div class="field"><label for="dtMeal">ארוחה</label>
+        <select id="dtMeal"></select></div>
+      <div class="field" style="margin-top:10px"><label for="dtQ">מאכל</label>
+        <input id="dtQ" type="search" placeholder="חפש במאגר המאכלים…" autocomplete="off">
+        <div id="dtResults" class="suggest" hidden></div></div>
+      <div id="dtPicked" hidden>
+        <div class="grid2" style="margin-top:10px">
+          <div class="field"><label for="dtAmount">כמות</label>
+            <input id="dtAmount" type="number" min="0" step="1" value="100" inputmode="decimal"></div>
+          <div class="field"><label for="dtUnit">יחידה</label><select id="dtUnit"></select></div>
+        </div>
+        <div class="preview" id="dtPrev"></div>
+      </div>
+      <button class="btn" id="dtAdd" style="margin-top:12px">הוספה לתפריט</button>
+      <button class="btn sec" id="dietCopy" style="margin-top:8px">העתקת היום הזה ליום אחר</button>
     </div>
   </div>
 </div>

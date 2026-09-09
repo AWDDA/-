@@ -313,6 +313,30 @@ const Cloud = (() => {
     });
   }
 
+  /* ---------- תפריטי תזונה ---------- */
+  async function getMealPlan(linkId){
+    const r = await rest('meal_plans?link_id=eq.' + linkId + '&select=plan,updated_at');
+    return (r && r[0]) || null;
+  }
+
+  async function saveMealPlan(linkId, traineeId, plan){
+    const body = JSON.stringify({plan, updated_at: new Date().toISOString()});
+    const exists = await rest('meal_plans?link_id=eq.' + linkId + '&select=link_id');
+    if (exists && exists.length){
+      await rest('meal_plans?link_id=eq.' + linkId, {
+        method: 'PATCH', headers: {Prefer: 'return=minimal'}, body
+      });
+      return;
+    }
+    await rest('meal_plans', {
+      method: 'POST', headers: {Prefer: 'return=minimal'},
+      body: JSON.stringify({
+        link_id: linkId, coach_id: user().id, trainee_id: traineeId,
+        plan, updated_at: new Date().toISOString()
+      })
+    });
+  }
+
   /* ---------- ביצוע אימונים ---------- */
   async function getWorkoutLog(linkId, date){
     const r = await rest('workout_logs?link_id=eq.' + linkId +
@@ -426,6 +450,7 @@ const Cloud = (() => {
     profilesByIds, pullFor, messages, sendMessage, setRole, diagnose,
     uploadImage, imageUrl,
     getPlan, savePlan, getWorkoutLog, setWorkoutLog, recentWorkoutLogs,
+    getMealPlan, saveMealPlan, getDietLog, setDietLog,
     pending: () => Object.keys(queue).length,
     lastSync: () => LS.get('maazan:sb:lastsync'),
     onChange: fn => listeners.push(fn)
