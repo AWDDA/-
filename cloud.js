@@ -381,6 +381,30 @@ const Cloud = (() => {
     });
   }
 
+  /* ---------- יומן התפריט ---------- */
+  async function getDietLog(linkId, date){
+    const r = await rest('diet_logs?link_id=eq.' + linkId +
+                         '&log_date=eq.' + date + '&select=id,done');
+    return (r && r[0]) || null;
+  }
+
+  async function setDietLog(linkId, date, done){
+    const existing = await getDietLog(linkId, date);
+    const payload = {done, updated_at: new Date().toISOString()};
+    if (existing){
+      await rest('diet_logs?id=eq.' + existing.id, {
+        method: 'PATCH', headers: {Prefer: 'return=minimal'}, body: JSON.stringify(payload)
+      });
+      return;
+    }
+    await rest('diet_logs', {
+      method: 'POST', headers: {Prefer: 'return=minimal'},
+      body: JSON.stringify(Object.assign({
+        link_id: linkId, trainee_id: user().id, log_date: date
+      }, payload))
+    });
+  }
+
   /* ---------- אחסון תמונות ---------- */
   async function storage(path, opts){
     if (!signedIn()) throw new Error('לא מחובר');
