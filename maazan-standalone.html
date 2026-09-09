@@ -623,11 +623,6 @@ option{background:#1B1F2B;color:var(--text)}
       </div>
 
       <div id="prog-mine">
-      <div class="block" id="dietBlock" hidden>
-        <div class="bhead"><h2>התפריט שלי</h2><span id="dietFrom"></span></div>
-        <div class="daytabs" id="myDietDays"></div>
-        <div id="myDietBody"></div>
-      </div>
       <div class="block">
         <div class="bhead"><h2>7 הימים האחרונים</h2><span style="font-size:12px;color:var(--mut)">הקש על יום</span></div>
         <div class="chart" id="chart"></div>
@@ -643,6 +638,11 @@ option{background:#1B1F2B;color:var(--text)}
           <svg id="spark" viewBox="0 0 300 88" preserveAspectRatio="none" aria-hidden="true"></svg>
           <div class="sparkfoot"><span id="wFirst"></span><span id="wLast"></span></div>
         </div>
+      </div>
+      <div class="block" id="dietBlock" hidden>
+        <div class="bhead"><h2>התפריט שלי</h2><span id="dietFrom"></span></div>
+        <div class="daytabs" id="myDietDays"></div>
+        <div id="myDietBody"></div>
       </div>
       </div>
 
@@ -3136,7 +3136,7 @@ function maybeOnboard(){
    שורות של מתאמן רק כשקיים קישור מאושר. הקוד כאן הוא הממשק,
    לא ההגנה — ביטול אישור סוגר את הגישה גם אם הקוד לא ידע על כך.
    ============================================================ */
-const APP_VERSION = 28;
+const APP_VERSION = 29;
 const USERNAME_RE = /^[a-z0-9._-]{3,20}$/i;
 let coachTimer = null;
 
@@ -4136,6 +4136,12 @@ document.addEventListener('visibilitychange', () => {
    מבנה מקביל לתוכנית האימונים: המאמן בונה, המתאמן מסמן.
    הפריטים נבחרים ממאגר המאכלים הקיים, אז הערכים מחושבים ולא מוקלדים.
    ============================================================ */
+/* שמות הארוחות בתפריט ובמחשבון אינם זהים ('ביניים' מול
+   'נשנושים ומשקאות'), אז המיפוי מפורש ולא לפי השוואת מחרוזות. */
+const DIET_TO_MEAL = {
+  'ארוחת בוקר':'breakfast', 'ארוחת צהריים':'lunch',
+  'ארוחת ערב':'dinner', 'ביניים':'snacks'
+};
 const DIET_MEALS = ['ארוחת בוקר','ארוחת צהריים','ארוחת ערב','ביניים'];
 let dietLink = null, dietTrainee = null, dietDay = 0, dietData = {}, dtPick = null;
 
@@ -4342,11 +4348,16 @@ function drawMyDiet(){
     html += '<div class="mealhead">' + meal + '<span>' + nf(mt.k) + ' קק״ל</span></div>';
     html += items.map(x => {
       const k = dietKey(x);
-      return '<label class="ex">' +
+      const idx = list.indexOf(x);
+      /* הכפתור יושב מחוץ ל-label, אחרת לחיצה עליו הייתה מסמנת
+         את תיבת הסימון של אותה שורה. */
+      return '<div class="ex">' +
+        '<label style="display:flex;align-items:center;gap:12px;flex:1;min-width:0;margin:0">' +
         (isToday ? '<input type="checkbox" data-dk="' + esc(k) + '"' +
                    (myDietDone.indexOf(k) > -1 ? ' checked' : '') + '>' : '') +
-        '<div class="info"><b>' + esc(x.n) + '</b><span>' + esc(x.q) + ' · ' +
-        Math.round(x.k) + ' קק״ל</span></div></label>';
+        '<span class="info"><b>' + esc(x.n) + '</b><span>' + esc(x.q) + ' · ' +
+        Math.round(x.k) + ' קק״ל</span></span></label>' +
+        '<button class="mini go" data-ai="' + idx + '">הוספה</button></div>';
     }).join('');
   });
   const t = dietTotals(list);
@@ -4358,6 +4369,27 @@ function drawMyDiet(){
   if (!isToday) html += '<div class="empty" style="margin-top:12px">סימון אפשרי ביום עצמו.</div>';
   $('myDietBody').innerHTML = html;
 }
+
+/* הוספה של פריט אחד מהתפריט אל המחשבון הקלורי */
+$('myDietBody').addEventListener('click', async e => {
+  const b = e.target.closest('[data-ai]'); if (!b) return;
+  e.preventDefault();
+  const x = myDiet[DAY_KEYS[myDietDay]][+b.dataset.ai];
+  if (!x) return;
+
+  const mealId = DIET_TO_MEAL[x.t] || guessMeal();
+
+  state.log[mealId].push({n:x.n, q:x.q, k:+x.k || 0,
+                          p:+x.p || 0, c:+x.c || 0, f:+x.f || 0});
+  state.recent = [x.n].concat(state.recent.filter(v => v !== x.n)).slice(0, 12);
+  await saveLog(); await saveRecent();
+  renderDiary(); renderRecents(); renderSummary();
+
+  b.textContent = 'נוסף ✓';
+  b.disabled = true;
+  setTimeout(() => { b.textContent = 'הוספה'; b.disabled = false; }, 1600);
+  toast(x.n + ' · ' + Math.round(x.k) + ' קק״ל נוסף ליומן');
+});
 
 $('myDietBody').addEventListener('change', async e => {
   const cb = e.target.closest('[data-dk]'); if (!cb || !myDietLink) return;
