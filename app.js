@@ -1087,6 +1087,16 @@ function checkCredentials(mode, email, pass, pass2){
   return null;
 }
 
+/* בדיקה שרצה בדפדפן: id כפול שובר את getElementById בשקט */
+function dupIds(){
+  const seen = {}, dup = [];
+  document.querySelectorAll('[id]').forEach(el => {
+    if (seen[el.id]) { if (dup.indexOf(el.id) === -1) dup.push(el.id); }
+    else seen[el.id] = 1;
+  });
+  return dup.length ? dup.join(', ') : 'אין';
+}
+
 /* ---------- ממשק החשבון ---------- */
 function renderAccount(){
   const cfgd = Cloud.ready(), inn = Cloud.signedIn();
@@ -1128,7 +1138,14 @@ async function doAuth(mode){
   try {
     if (mode === 'up'){
       const r = await Cloud.signUp(email, pass);
-      if (r.needsConfirm){ toast('נשלח אליך מייל אישור — אשר אותו ואז התחבר'); acctSetMode('in'); return; }
+      if (r.exists){
+        toast('האימייל הזה כבר רשום. עבור לכניסה, או השתמש באימייל אחר.');
+        acctSetMode('in'); return;
+      }
+      if (r.needsConfirm){
+        toast('נשלח מייל אישור ל' + email + '. אשר אותו ואז התחבר.');
+        acctSetMode('in'); return;
+      }
     } else {
       await Cloud.signIn(email, pass);
     }
@@ -1219,9 +1236,18 @@ $('obGo').addEventListener('click', async () => {
   try {
     if (obMode === 'up'){
       const r = await Cloud.signUp(email, pass);
+      if (r.exists){
+        toast('האימייל הזה כבר רשום. עבור לכניסה, או השתמש באימייל אחר.');
+        obSetMode('in');
+        return;
+      }
       /* אישור מייל מופעל: אין עדיין סשן, אז אי אפשר ליצור פרופיל.
          הוא ייווצר בכניסה הראשונה, כשהשלב הזה יופיע שוב. */
-      if (r.needsConfirm){ toast('נשלח אליך מייל אישור — אשר אותו וחזור לכאן'); obSetMode('in'); return; }
+      if (r.needsConfirm){
+        toast('נשלח מייל אישור ל' + email + '. אשר אותו ואז התחבר.');
+        obSetMode('in');
+        return;
+      }
     } else {
       await Cloud.signIn(email, pass);
     }
@@ -1351,7 +1377,7 @@ function maybeOnboard(){
    שורות של מתאמן רק כשקיים קישור מאושר. הקוד כאן הוא הממשק,
    לא ההגנה — ביטול אישור סוגר את הגישה גם אם הקוד לא ידע על כך.
    ============================================================ */
-const APP_VERSION = 26;
+const APP_VERSION = 27;
 const USERNAME_RE = /^[a-z0-9._-]{3,20}$/i;
 let coachTimer = null;
 
@@ -1399,6 +1425,7 @@ $('diagBtn').addEventListener('click', async () => {
       'שם משתמש: ' + (d.profile ? '@' + d.profile.username : 'אין פרופיל') + '\n' +
       'תפקיד: ' + (d.profile ? d.profile.role : '—') + '\n' +
       'קישורים: ' + (d.links === null ? '—' : d.links) + '\n' +
+      'שדות כפולים: ' + dupIds() + '\n' +
       'מאגר תרגילים: ' + (typeof EXERCISES !== 'undefined' && EXERCISES.length
         ? EXERCISES.length : 'חסר — exercises.js לא נטען') + '\n' +
       'גרסה: ' + APP_VERSION +
@@ -1633,8 +1660,12 @@ async function drawLive(){
   const lk = state.links.find(l => l.trainee_id === id && l.status === 'approved');
   if (lk){
     try {
-      const log = await Cloud.getWorkoutLog(lk.id, todayKey());
-      const plan = normalizePlan((await Cloud.getPlan(lk.id) || {}).plan);
+      /* שתי הקריאות בלתי תלויות — אין סיבה לחכות לאחת בשביל השנייה */
+      const [log, planRow] = await Promise.all([
+        Cloud.getWorkoutLog(lk.id, todayKey()),
+        Cloud.getPlan(lk.id)
+      ]);
+      const plan = normalizePlan((planRow || {}).plan);
       const todays = plan[DAY_KEYS[new Date().getDay()]] || [];
       if (!todays.length){
         wk = '<div class="empty" style="margin-top:12px">היום יום מנוחה בתוכנית.</div>';
@@ -1725,15 +1756,20 @@ function appendBubble(html){
 
 /* התמונות בדלי פרטי, אז כל אחת נטענת דרך קישור חתום */
 async function hydrateImages(root){
-  const imgs = (root || $('chatLog')).querySelectorAll('img[data-img]:not([src])');
-  for (const el of imgs){
+  const imgs = [...(root || $('chatLog')).querySelectorAll('img[data-img]:not([src])')];
+  /* קישור חתום לכל תמונה הוא בקשה נפרדת. בטור זה נראה כמו תקיעה. */
+  await Promise.all(imgs.map(async el => {
     const path = el.dataset.img;
     try {
       if (!imgCache[path]) imgCache[path] = await Cloud.imageUrl(path, 3600);
       el.src = imgCache[path];
-    } catch(e){ el.replaceWith(Object.assign(document.createElement('div'),
-      {className:'chatempty', textContent:'התמונה לא נטענה'})); }
-  }
+      el.loading = 'lazy';
+      el.decoding = 'async';
+    } catch(e){
+      el.replaceWith(Object.assign(document.createElement('div'),
+        {className:'chatempty', textContent:'התמונה לא נטענה'}));
+    }
+  }));
 }
 
 $('chatLog').addEventListener('click', e => {
@@ -1969,7 +2005,7 @@ $('planList').addEventListener('click', e => {
 });
 
 $('exAdd').addEventListener('click', () => {
-  const n = $('exName').value.trim();
+  const n = $('exChosen').value.trim();
   if (!n){ toast('צריך שם לתרגיל'); return; }
   planData[DAY_KEYS[planDay]].push({
     n,
@@ -1978,7 +2014,7 @@ $('exAdd').addEventListener('click', () => {
     rest: $('exRest').value.trim() || null,
     note: $('exNote').value.trim() || null
   });
-  ['exName','exSets','exReps','exRest','exNote'].forEach(id => { $(id).value = ''; });
+  ['exChosen','exSets','exReps','exRest','exNote'].forEach(id => { $(id).value = ''; });
   clearPicked();
   drawPlanEditor();
 });
@@ -2010,6 +2046,17 @@ $('planSave').addEventListener('click', async () => {
 /* ---------- צד המתאמן ---------- */
 let myLink = null, wkDay = new Date().getDay(), wkPlan = null, wkDone = [];
 
+/* גם התפריט וגם האימונים צריכים את אותה רשימת קישורים.
+   מטמון קצר חוסך קריאה כפולה בכל מעבר בין הקטגוריות. */
+let linksCache = null, linksAt = 0;
+async function approvedLink(){
+  if (linksCache && Date.now() - linksAt < 15000) return linksCache;
+  const links = await Cloud.traineeLinks();
+  linksCache = links.filter(l => l.status === 'approved')[0] || null;
+  linksAt = Date.now();
+  return linksCache;
+}
+
 const PROG_TABS = ['mine','workouts','friends','coaching'];
 
 function progTab(t){
@@ -2035,23 +2082,23 @@ async function loadMyWorkouts(){
     return;
   }
   try {
-    const links = await Cloud.traineeLinks();
-    const appr = links.filter(l => l.status === 'approved');
-    if (!appr.length){
+    myLink = await approvedLink();
+    if (!myLink){
       $('planCoach').textContent = '';
       $('wkBody').innerHTML = '<div class="empty">אין לך עדיין מאמן מקושר. ' +
         'כשמאמן יבקש גישה ותאשר, התוכנית שלו תופיע כאן.</div>';
       $('wkHistory').innerHTML = '';
       return;
     }
-    myLink = appr[0];
-    const names = await Cloud.profilesByIds([myLink.coach_id]).catch(() => ({}));
+    /* שלוש קריאות בלתי תלויות — במקביל */
+    const [names, row, log] = await Promise.all([
+      Cloud.profilesByIds([myLink.coach_id]).catch(() => ({})),
+      Cloud.getPlan(myLink.id),
+      Cloud.getWorkoutLog(myLink.id, todayKey())
+    ]);
     const c = names[myLink.coach_id];
     $('planCoach').textContent = c ? 'מאת ' + personLabel(c) : '';
-
-    const row = await Cloud.getPlan(myLink.id);
     wkPlan = normalizePlan(row && row.plan);
-    const log = await Cloud.getWorkoutLog(myLink.id, todayKey());
     wkDone = (log && Array.isArray(log.done)) ? log.done : [];
     wkDay = new Date().getDay();
     drawMyWorkouts();
@@ -2278,14 +2325,14 @@ $('pickList').addEventListener('click', e => {
 });
 
 function applyPicked(x){
-  $('exName').value = x.n;
+  $('exChosen').value = x.n;
   $('exPickLabel').textContent = x.n;
   $('exPickMap').innerHTML = muscleMapSVG(x.m, 20);
   if (!$('exNote').value && x.d) $('exNote').value = x.d;
 }
 
 function clearPicked(){
-  $('exName').value = '';
+  $('exChosen').value = '';
   $('exPickLabel').textContent = 'בחירת תרגיל מהמאגר';
   $('exPickMap').innerHTML = '';
 }
@@ -2499,10 +2546,8 @@ let myDietLink = null, myDietDay = new Date().getDay(), myDiet = null, myDietDon
 async function loadMyDiet(){
   if (!Cloud.signedIn()){ $('dietBlock').hidden = true; return; }
   try {
-    const links = await Cloud.traineeLinks();
-    const appr = links.filter(l => l.status === 'approved');
-    if (!appr.length){ $('dietBlock').hidden = true; return; }
-    myDietLink = appr[0];
+    myDietLink = await approvedLink();
+    if (!myDietLink){ $('dietBlock').hidden = true; return; }
     const row = await Cloud.getMealPlan(myDietLink.id);
     myDiet = normalizeDiet(row && row.plan);
     const any = DAY_KEYS.some(k => myDiet[k].length);

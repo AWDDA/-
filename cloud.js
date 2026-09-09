@@ -80,9 +80,23 @@ const Cloud = (() => {
 
   async function signUp(email, password){
     const j = await authCall('signup', {email, password});
-    if (!j.access_token) return {needsConfirm:true};   // אישור מייל מופעל בפרויקט
-    store(j);
-    return {needsConfirm:false};
+
+    /* יש סשן — ההרשמה הושלמה */
+    if (j.access_token){ store(j); return {ok:true}; }
+
+    /* Supabase לא חושף שאימייל תפוס, מטעמי פרטיות: הוא מחזיר 200
+       עם משתמש מעורפל ו-identities ריק. בלי הבדיקה הזאת המשתמש
+       מקבל «נשלח מייל אישור» שלא יגיע לעולם, ונתקע. */
+    if (j.id && Array.isArray(j.identities) && j.identities.length === 0){
+      return {exists:true};
+    }
+
+    return {needsConfirm:true};
+  }
+
+  /* שליחה חוזרת של מייל האישור */
+  async function resendConfirm(email){
+    await authCall('resend', {type:'signup', email});
   }
   async function signIn(email, password){
     store(await authCall('token?grant_type=password', {email, password}));
@@ -444,7 +458,7 @@ const Cloud = (() => {
 
   return {
     ready, signedIn, user, cfg: () => cfg,
-    signUp, signIn, signOut, pull, enqueue, flush,
+    signUp, signIn, signOut, resendConfirm, pull, enqueue, flush,
     myProfile, saveProfile, usernameTaken, searchUsers,
     coachLinks, traineeLinks, requestLink, setLinkStatus,
     profilesByIds, pullFor, messages, sendMessage, setRole, diagnose,
