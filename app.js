@@ -569,8 +569,10 @@ $('saveNew').addEventListener('click', () => {
   const n = $('nName').value.trim(), k = parseFloat($('nKcal').value);
   if (!n) { toast('צריך לתת שם למאכל'); return; }
   if (!(k >= 0)) { toast('צריך להזין קלוריות ל‑100 גרם'); return; }
-  state.custom.unshift({n, g:'מאכל שלי', k,
-    p:parseFloat($('nP').value)||0, c:parseFloat($('nC').value)||0, f:parseFloat($('nF').value)||0});
+  const nf2 = {n, g: pendingBarcode ? 'ברקוד ' + pendingBarcode : 'מאכל שלי', k,
+    p:parseFloat($('nP').value)||0, c:parseFloat($('nC').value)||0, f:parseFloat($('nF').value)||0};
+  if (pendingBarcode){ nf2.bc = pendingBarcode; pendingBarcode = null; }
+  state.custom.unshift(nf2);
   saveCustom();
   ['nName','nKcal','nP','nC','nF'].forEach(id => { $(id).value = ''; });
   showTab('search'); $('q').value = n; renderResults(n); pickFood(n);
@@ -839,6 +841,15 @@ async function scanBarcode(){
 }
 
 let lastCode = null;
+let pendingBarcode = null;
+
+/* מוצר שנסרק פעם אחת והוזן ידנית נזכר לנצח, לפי הברקוד.
+   זה הפתרון האמיתי לכיסוי החלקי של מוצרים ישראליים. */
+function localByBarcode(code){
+  return state.custom.find(f => f.bc && (f.bc === code ||
+    f.bc === '0' + code || '0' + f.bc === code)) || null;
+}
+
 async function onBarcode(code){
   code = String(code || '').trim();
   if (!code || code === lastCode) return;
@@ -846,13 +857,34 @@ async function onBarcode(code){
   setTimeout(() => { lastCode = null; }, 2500);
   if (navigator.vibrate) navigator.vibrate(60);
   closeCam();
-  toast('מחפש את המוצר…');
-  const food = await lookupBarcode(code);
-  if (!food){
-    toast('המוצר לא נמצא במאגר — הוסף אותו פעם אחת ידנית');
-    openSheet('new');
+  pendingBarcode = code;
+
+  /* קודם הזיכרון המקומי — מיידי, ועובד גם בלי אינטרנט */
+  const known = localByBarcode(code);
+  if (known){ openSheet('search'); pickFood(known.n); return; }
+
+  /* מציגים את המספר שנקרא, כדי שיהיה ברור שהסריקה הצליחה
+     גם כשהמוצר לא נמצא */
+  toast('ברקוד ' + code + ' — מחפש…');
+  const res = await lookupBarcode(code);
+
+  if (res && res.food){
+    const food = res.food;
+    food.bc = code;
+    if (!state.custom.some(f => f.n === food.n)){ state.custom.unshift(food); saveCustom(); }
+    openSheet('search');
+    pickFood(food.n);
     return;
   }
+
+  /* לא נמצא, או נמצא רק השם: פותחים טופס עם מה שיש */
+  openSheet('new');
+  $('nName').value = (res && res.name) || '';
+  $('nKcal').focus();
+  toast(res && res.name
+    ? 'זוהה: ' + res.name + '. השלם ערכים והוא ייזכר לפעם הבאה.'
+    : 'ברקוד ' + code + ' לא נמצא במאגר. הזן אותו פעם אחת והוא ייזכר.');
+  return;
   if (!state.custom.some(f => f.n === food.n)){ state.custom.unshift(food); saveCustom(); }
   openSheet('search');
   pickFood(food.n);
@@ -869,6 +901,25 @@ function codeVariants(code){
 }
 
 async function lookupBarcode(code){
+  const off = await lookupOFF(code);
+  if (off) return {food: off};
+
+  /* מקור שני: מחזיר שם ומותג בלבד, בלי ערכים תזונתיים.
+     עדיין חוסך למשתמש להקליד את השם. */
+  try {
+    const r = await fetch('https://api.upcitemdb.com/prod/trial/lookup?upc=' +
+                          encodeURIComponent(code));
+    if (r.ok){
+      const j = await r.json();
+      const it = j && j.items && j.items[0];
+      if (it && it.title) return {name: (it.brand ? it.brand + ' · ' : '') + it.title};
+    }
+  } catch(e){}
+
+  return null;
+}
+
+async function lookupOFF(code){
   for (const c of codeVariants(code)){
     const url = 'https://world.openfoodfacts.org/api/v2/product/' + encodeURIComponent(c) +
                 '.json?fields=product_name,product_name_he,brands,nutriments,serving_quantity';
@@ -1377,7 +1428,7 @@ function maybeOnboard(){
    שורות של מתאמן רק כשקיים קישור מאושר. הקוד כאן הוא הממשק,
    לא ההגנה — ביטול אישור סוגר את הגישה גם אם הקוד לא ידע על כך.
    ============================================================ */
-const APP_VERSION = 29;
+const APP_VERSION = 30;
 const USERNAME_RE = /^[a-z0-9._-]{3,20}$/i;
 let coachTimer = null;
 
