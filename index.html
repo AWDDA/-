@@ -787,6 +787,28 @@ option{background:#1B1F2B;color:var(--text)}
           <div class="stat"><div class="k">מים מומלצים</div><div class="v" id="sWater">—</div></div>
           <div class="stat"><div class="k">יעד חלבון</div><div class="v" id="sProt">—</div></div>
         </div>
+        <div class="form" id="tgtBox" style="margin-top:18px">
+          <div class="field wide"><label>חישוב היעדים</label>
+            <div class="seg" id="tgtMode">
+              <button type="button" data-v="auto" aria-pressed="true">אוטומטי</button>
+              <button type="button" data-v="manual" aria-pressed="false">ידני</button>
+            </div>
+          </div>
+          <div class="field wide" id="tgtFields" hidden>
+            <div class="grid2">
+              <div class="field"><label for="tgtKcal">יעד קלוריות</label>
+                <input id="tgtKcal" type="number" min="800" max="8000" inputmode="numeric"></div>
+              <div class="field"><label for="tgtP">חלבון (ג׳)</label>
+                <input id="tgtP" type="number" min="0" max="500" inputmode="numeric"></div>
+              <div class="field"><label for="tgtC">פחמימות (ג׳)</label>
+                <input id="tgtC" type="number" min="0" max="900" inputmode="numeric"></div>
+              <div class="field"><label for="tgtF">שומן (ג׳)</label>
+                <input id="tgtF" type="number" min="0" max="300" inputmode="numeric"></div>
+            </div>
+            <p class="empty" id="tgtHint" style="margin-top:10px"></p>
+            <button class="btn sec" id="tgtReset" style="margin-top:10px">חזרה לחישוב האוטומטי</button>
+          </div>
+        </div>
         <p class="note" id="floorNote" hidden></p>
         <div class="btnrow"><button class="btn sec" id="logWeight">רישום המשקל להיום</button></div>
       </div>

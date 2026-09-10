@@ -787,6 +787,28 @@ option{background:#1B1F2B;color:var(--text)}
           <div class="stat"><div class="k">מים מומלצים</div><div class="v" id="sWater">—</div></div>
           <div class="stat"><div class="k">יעד חלבון</div><div class="v" id="sProt">—</div></div>
         </div>
+        <div class="form" id="tgtBox" style="margin-top:18px">
+          <div class="field wide"><label>חישוב היעדים</label>
+            <div class="seg" id="tgtMode">
+              <button type="button" data-v="auto" aria-pressed="true">אוטומטי</button>
+              <button type="button" data-v="manual" aria-pressed="false">ידני</button>
+            </div>
+          </div>
+          <div class="field wide" id="tgtFields" hidden>
+            <div class="grid2">
+              <div class="field"><label for="tgtKcal">יעד קלוריות</label>
+                <input id="tgtKcal" type="number" min="800" max="8000" inputmode="numeric"></div>
+              <div class="field"><label for="tgtP">חלבון (ג׳)</label>
+                <input id="tgtP" type="number" min="0" max="500" inputmode="numeric"></div>
+              <div class="field"><label for="tgtC">פחמימות (ג׳)</label>
+                <input id="tgtC" type="number" min="0" max="900" inputmode="numeric"></div>
+              <div class="field"><label for="tgtF">שומן (ג׳)</label>
+                <input id="tgtF" type="number" min="0" max="300" inputmode="numeric"></div>
+            </div>
+            <p class="empty" id="tgtHint" style="margin-top:10px"></p>
+            <button class="btn sec" id="tgtReset" style="margin-top:10px">חזרה לחישוב האוטומטי</button>
+          </div>
+        </div>
         <p class="note" id="floorNote" hidden></p>
         <div class="btnrow"><button class="btn sec" id="logWeight">רישום המשקל להיום</button></div>
       </div>
@@ -1926,7 +1948,8 @@ function stamp(k){
 
 /* ---------- state ---------- */
 const state = {
-  profile:{sex:'male', age:28, height:178, weight:80, activity:1.55, goal:-0.5},
+  profile:{sex:'male', age:28, height:178, weight:80, activity:1.55, goal:-0.5,
+           tgt:{on:false, kcal:null, p:null, c:null, f:null}},
   date: todayKey(),
   log: emptyLog(),
   custom: [], recent: [], weights: {},
@@ -1953,7 +1976,9 @@ function esc(s){ return String(s).replace(/[&<>"']/g, ch => ({'&':'&amp;','<':'&
 function allFoods(){ return state.custom.concat(FOODS); }
 
 /* ---------- calculations ---------- */
-function compute(P){
+/* ignoreManual=true מחזיר את החישוב הנקי, כדי שנוכל להציג
+   אותו כרמז ליד השדות הידניים. */
+function compute(P, ignoreManual){
   P = P || state.profile;
   const w = +P.weight||0, h = +P.height||0, a = +P.age||0;
   const bmr = P.sex === 'male' ? 10*w + 6.25*h - 5*a + 5 : 10*w + 6.25*h - 5*a - 161;
@@ -1969,8 +1994,20 @@ function compute(P){
   let carbs = Math.round((target - protein*4 - fat*9) / 4);
   if (carbs < 0) carbs = 0;
   const bmi = h > 0 ? w / Math.pow(h/100,2) : 0;
-  return {bmr:Math.round(bmr), tdee:Math.round(tdee), target:Math.round(target), clipped, floor,
-          protein, carbs, fat, bmi, water:round(w*0.035,1)};
+  const out = {bmr:Math.round(bmr), tdee:Math.round(tdee), target:Math.round(target), clipped, floor,
+               protein, carbs, fat, bmi, water:round(w*0.035,1), manual:false};
+
+  /* יעדים ידניים גוברים על החישוב. הם חלק מהפרופיל, ולכן
+     מסתנכרנים ותקפים גם בתצוגה של המאמן. */
+  const t = P.tgt;
+  if (!ignoreManual && t && t.on){
+    if (t.kcal > 0){ out.target = Math.round(t.kcal); out.clipped = false; }
+    if (t.p >= 0 && t.p !== null && t.p !== '') out.protein = Math.round(t.p);
+    if (t.c >= 0 && t.c !== null && t.c !== '') out.carbs   = Math.round(t.c);
+    if (t.f >= 0 && t.f !== null && t.f !== '') out.fat     = Math.round(t.f);
+    out.manual = true;
+  }
+  return out;
 }
 function bmiCat(b){ return b<18.5 ? 'תת־משקל' : b<25 ? 'תקין' : b<30 ? 'עודף משקל' : 'השמנה'; }
 function totals(){
@@ -2009,10 +2046,12 @@ function renderProfile(){
   state.targets = {kcal:r.target, p:r.protein, c:r.carbs, f:r.fat};
   $('sBmr').innerHTML    = nf(r.bmr)    + '<small>קק״ל</small>';
   $('sTdee').innerHTML   = nf(r.tdee)   + '<small>קק״ל</small>';
-  $('sTarget').innerHTML = nf(r.target) + '<small>קק״ל</small>';
+  $('sTarget').innerHTML = nf(r.target) +
+    '<small>' + (r.manual ? 'ידני' : 'קק״ל') + '</small>';
   $('sBmi').innerHTML    = round(r.bmi,1) + '<small>' + bmiCat(r.bmi) + '</small>';
   $('sWater').innerHTML  = r.water + '<small>ליטר</small>';
-  $('sProt').innerHTML   = r.protein + '<small>גרם</small>';
+  $('sProt').innerHTML   = r.protein +
+    '<small>' + (r.manual ? 'ידני' : 'גרם') + '</small>';
   const note = $('floorNote');
   if (r.clipped){
     note.hidden = false;
@@ -2214,7 +2253,7 @@ $('apiUrl').addEventListener('input', () => {
 ['age','height','weight','activity','goal'].forEach(id => {
   $(id).addEventListener('input', () => {
     state.profile[id] = $(id).value;
-    renderProfile(); renderSummary(); saveProfile();
+    renderProfile(); renderSummary(); renderTargets(); saveProfile();
   });
 });
 $('logWeight').addEventListener('click', () => {
@@ -2971,6 +3010,68 @@ function dupIds(){
   return dup.length ? dup.join(', ') : 'אין';
 }
 
+
+/* ---------- יעדים ידניים ---------- */
+function tgtObj(){
+  const P = state.profile;
+  if (!P.tgt) P.tgt = {on:false, kcal:null, p:null, c:null, f:null};
+  return P.tgt;
+}
+
+function renderTargets(){
+  const t = tgtObj();
+  const auto = compute(state.profile, true);
+  [...$('tgtMode').children].forEach(b =>
+    b.setAttribute('aria-pressed', String((b.dataset.v === 'manual') === !!t.on)));
+  $('tgtFields').hidden = !t.on;
+
+  $('tgtKcal').placeholder = nf(auto.target);
+  $('tgtP').placeholder = auto.protein;
+  $('tgtC').placeholder = auto.carbs;
+  $('tgtF').placeholder = auto.fat;
+  $('tgtHint').textContent =
+    'החישוב האוטומטי היה נותן ' + nf(auto.target) + ' קק״ל · ' +
+    auto.protein + '/' + auto.carbs + '/' + auto.fat + ' ג׳. ' +
+    'שדה שנשאר ריק ימשיך להתחשב בחישוב.';
+}
+
+$('tgtMode').addEventListener('click', async e => {
+  const b = e.target.closest('button'); if (!b) return;
+  const t = tgtObj();
+  t.on = b.dataset.v === 'manual';
+  if (t.on){
+    /* מעבר לידני ממלא את הערכים הנוכחיים, כדי שלא יקפוץ כלום */
+    const auto = compute(state.profile, true);
+    if (!(t.kcal > 0)) t.kcal = auto.target;
+    if (!(t.p > 0))    t.p = auto.protein;
+    if (!(t.c > 0))    t.c = auto.carbs;
+    if (!(t.f > 0))    t.f = auto.fat;
+    ['tgtKcal','tgtP','tgtC','tgtF'].forEach((id, i) => {
+      $(id).value = [t.kcal, t.p, t.c, t.f][i];
+    });
+  }
+  await saveProfile();
+  renderTargets(); renderProfile(); renderSummary();
+  toast(t.on ? 'עברת ליעדים ידניים' : 'חזרת לחישוב האוטומטי');
+});
+
+[['tgtKcal','kcal'],['tgtP','p'],['tgtC','c'],['tgtF','f']].forEach(([id, key]) => {
+  $(id).addEventListener('input', () => {
+    const v = $(id).value.trim();
+    tgtObj()[key] = v === '' ? null : parseFloat(v);
+    saveProfile();
+    renderProfile(); renderSummary();
+  });
+});
+
+$('tgtReset').addEventListener('click', async () => {
+  state.profile.tgt = {on:false, kcal:null, p:null, c:null, f:null};
+  ['tgtKcal','tgtP','tgtC','tgtF'].forEach(id => { $(id).value = ''; });
+  await saveProfile();
+  renderTargets(); renderProfile(); renderSummary();
+  toast('היעדים חושבו מחדש לפי הפרטים שלך');
+});
+
 /* ---------- ממשק החשבון ---------- */
 function renderAccount(){
   const cfgd = Cloud.ready(), inn = Cloud.signedIn();
@@ -3251,7 +3352,7 @@ function maybeOnboard(){
    שורות של מתאמן רק כשקיים קישור מאושר. הקוד כאן הוא הממשק,
    לא ההגנה — ביטול אישור סוגר את הגישה גם אם הקוד לא ידע על כך.
    ============================================================ */
-const APP_VERSION = 32;
+const APP_VERSION = 33;
 const USERNAME_RE = /^[a-z0-9._-]{3,20}$/i;
 let coachTimer = null;
 
@@ -4575,10 +4676,16 @@ window.addEventListener('appinstalled', () => { $('installBtn').hidden = true; }
   $('age').value = P.age; $('height').value = P.height; $('weight').value = P.weight;
   $('activity').value = P.activity; $('goal').value = P.goal;
   $('apiUrl').value = state.apiUrl;
+  const t0 = tgtObj();
+  $('tgtKcal').value = t0.kcal != null ? t0.kcal : '';
+  $('tgtP').value = t0.p != null ? t0.p : '';
+  $('tgtC').value = t0.c != null ? t0.c : '';
+  $('tgtF').value = t0.f != null ? t0.f : '';
   renderAccount();
   if (Cloud.signedIn()){ await syncFromCloud(); await reloadEverything(); renderAccount(); }
   await loadLog();
   renderAll();
+  renderTargets();
   renderAccount();
   goto('home');
   maybeOnboard();
