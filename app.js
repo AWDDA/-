@@ -166,6 +166,16 @@ function $(id){
   return e;
 }
 function round(n,d){ const m=Math.pow(10,d||0); return Math.round(n*m)/m; }
+/* קריאה שחוזרת על עצמה בזמן הקלדה לא צריכה לרוץ בכל תו */
+function debounce(fn, ms){
+  let t;
+  return function(){
+    const a = arguments, self = this;
+    clearTimeout(t);
+    t = setTimeout(() => fn.apply(self, a), ms || 400);
+  };
+}
+
 function nf(n){ return Math.round(n).toLocaleString('he-IL'); }
 function esc(s){ return String(s).replace(/[&<>"']/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch])); }
 function allFoods(){ return state.custom.concat(FOODS); }
@@ -214,7 +224,9 @@ function exTotal(){ return (state.log.exercise||[]).reduce((s,i) => s + i.k, 0);
 function mealTotal(id){ return state.log[id].reduce((s,i) => s + i.k, 0); }
 
 /* ---------- persistence ---------- */
-const saveProfile = () => Store.set('maazan:profile', JSON.stringify(state.profile));
+const saveProfileNow = () => Store.set('maazan:profile', JSON.stringify(state.profile));
+/* קודם כל הקשה כתבה לאחסון ודחפה לענן. עכשיו פעם אחת אחרי חצי שנייה. */
+const saveProfile = debounce(saveProfileNow, 500);
 const saveCustom  = () => Store.set('maazan:custom',  JSON.stringify(state.custom));
 const saveRecent  = () => Store.set('maazan:recent',  JSON.stringify(state.recent));
 const saveWeights = () => Store.set('maazan:weights', JSON.stringify(state.weights));
@@ -535,7 +547,7 @@ function renderResults(query){
         '<div class="kc">'+f.k+' קק״ל / 100 ג׳</div></li>').join('')
     : '<li style="pointer-events:none"><div class="nm"><b>לא נמצא מאכל בשם הזה</b><span>אפשר להוסיף אותו בלשונית «מאכל חדש»</span></div></li>';
 }
-$('q').addEventListener('input', e => renderResults(e.target.value));
+$('q').addEventListener('input', debounce(e => renderResults($('q').value), 120));
 $('results').addEventListener('click', e => {
   const li = e.target.closest('li[data-name]'); if (li) pickFood(li.dataset.name);
 });
@@ -1245,7 +1257,7 @@ $('tgtMode').addEventListener('click', async e => {
       $(id).value = [t.kcal, t.p, t.c, t.f][i];
     });
   }
-  await saveProfile();
+  await saveProfileNow();
   renderTargets(); renderProfile(); renderSummary();
   toast(t.on ? 'עברת ליעדים ידניים' : 'חזרת לחישוב האוטומטי');
 });
@@ -1262,7 +1274,7 @@ $('tgtMode').addEventListener('click', async e => {
 $('tgtReset').addEventListener('click', async () => {
   state.profile.tgt = {on:false, kcal:null, p:null, c:null, f:null};
   ['tgtKcal','tgtP','tgtC','tgtF'].forEach(id => { $(id).value = ''; });
-  await saveProfile();
+  await saveProfileNow();
   renderTargets(); renderProfile(); renderSummary();
   toast('היעדים חושבו מחדש לפי הפרטים שלך');
 });
@@ -1507,7 +1519,7 @@ $('obFinish').addEventListener('click', async () => {
     activity: $('obActivity').value,
     goal: $('obGoal').value
   };
-  await saveProfile();
+  await saveProfileNow();
   state.weights[todayKey()] = round(w, 1);
   await saveWeights();
   const P = state.profile;
@@ -1547,7 +1559,7 @@ function maybeOnboard(){
    שורות של מתאמן רק כשקיים קישור מאושר. הקוד כאן הוא הממשק,
    לא ההגנה — ביטול אישור סוגר את הגישה גם אם הקוד לא ידע על כך.
    ============================================================ */
-const APP_VERSION = 33;
+const APP_VERSION = 34;
 const USERNAME_RE = /^[a-z0-9._-]{3,20}$/i;
 let coachTimer = null;
 
@@ -2354,12 +2366,15 @@ $('wkBody').addEventListener('change', async e => {
   try {
     await Cloud.setWorkoutLog(myLink.id, todayKey(), wkDone, all);
     if (all) toast('כל הכבוד, סיימת את האימון של היום');
-    drawWorkoutHistory();
+    refreshHistory();
   } catch(err){
     toast(String((err && err.message) || err));
     cb.checked = !cb.checked;
   }
 });
+
+/* סימון מהיר של חמישה תרגילים ברצף היה מייצר חמש קריאות רשת */
+const refreshHistory = debounce(() => drawWorkoutHistory(), 900);
 
 async function drawWorkoutHistory(){
   if (!myLink){ $('wkHistory').innerHTML = ''; return; }
@@ -2860,11 +2875,17 @@ window.addEventListener('appinstalled', () => { $('installBtn').hidden = true; }
 /* ---------- boot ---------- */
 (async function init(){
   try {
-    const p = await Store.get('maazan:profile'); if (p) Object.assign(state.profile, JSON.parse(p));
-    const c = await Store.get('maazan:custom');  if (c) state.custom  = JSON.parse(c) || [];
-    const r = await Store.get('maazan:recent');  if (r) state.recent  = JSON.parse(r) || [];
-    const w = await Store.get('maazan:weights'); if (w) state.weights = JSON.parse(w) || {};
-    const u = await Store.get('maazan:apiurl');  if (u) state.apiUrl  = u;
+    /* חמש קריאות בלתי תלויות — במקביל, לא בטור */
+    const [p, c, r, w, u] = await Promise.all([
+      Store.get('maazan:profile'), Store.get('maazan:custom'),
+      Store.get('maazan:recent'),  Store.get('maazan:weights'),
+      Store.get('maazan:apiurl')
+    ]);
+    if (p) Object.assign(state.profile, JSON.parse(p));
+    if (c) state.custom  = JSON.parse(c) || [];
+    if (r) state.recent  = JSON.parse(r) || [];
+    if (w) state.weights = JSON.parse(w) || {};
+    if (u) state.apiUrl  = u;
   } catch(e) {}
   const P = state.profile;
   [...$('sexSeg').children].forEach(b => b.setAttribute('aria-pressed', String(b.dataset.v === P.sex)));
