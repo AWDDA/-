@@ -21,7 +21,7 @@
    שלו. אל תשים כאן לעולם את ה-service_role key.
    ------------------------------------------------------------ */
 const SUPABASE_URL      = 'https://awkmwxthzypjelbceoex.supabase.co';
-const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImF3a213eHRoenlwamVsYmNlb2V4Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODg0MzEyNjAsImV4cCI6MjEwNDAwNzI2MH0.uO2C5VTKaEat1Dp-plR68qrNMtRuUZwRAYag2mOccTw';
+const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZnZmNrZGVodmtnY2RneXRqdXNqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTA3OTA2MTMsImV4cCI6MjEwNjM2NjYxM30.e1VCM874MPRIsCsGyFeZTLNUoELiWgu43olOwc6Aj8Y';
 
 const Cloud = (() => {
   const LS = {
