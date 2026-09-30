@@ -1320,8 +1320,9 @@ function obStep(n){
   $('obIdent').hidden   = (n !== 2);
   $('obDetails').hidden = (n !== 3);
   $('stp1').classList.toggle('on', n >= 1);
+  /* שני שלבים במחוון. שלב הפרטים (3) קיים רק במסלול «המשך בלי חשבון»
+     ומשתף את הנקודה השנייה. */
   $('stp2').classList.toggle('on', n >= 2);
-  $('stp3').classList.toggle('on', n >= 3);
 }
 function obSetMode(m){
   obMode = m;
@@ -1391,6 +1392,7 @@ $('obGo').addEventListener('click', async () => {
 });
 
 $('obSkip').addEventListener('click', () => { obPrefill(); obStep(3); });
+/* שלב 3 נשאר קיים למי שמדלג על חשבון; «המשך» כבר לא מוביל אליו */
 
 /* בקשת זהות בפני עצמה — למשתמש שיש לו חשבון אבל עוד אין לו שם משתמש */
 let obFlow = 'full';   // 'full' = הרשמה מלאה, 'identity' = רק שם משתמש
@@ -1402,38 +1404,54 @@ function promptIdentity(){
   $('obUser').focus();
 }
 
+/* טוסט נעלם אחרי שתי שניות. שגיאה שחוסמת התקדמות צריכה להישאר
+   על המסך עד שמנסים שוב. */
+function showIdentErr(msg){
+  const el = $('obIdentErr');
+  el.textContent = msg;
+  el.hidden = false;
+}
+
 $('obIdentGo').addEventListener('click', async () => {
   const uname = $('obUser').value.trim();
   const err = checkUsername(uname);
   if (err){ toast(err); return; }
-  if (!Cloud.ready()){ obPrefill(); obStep(3); return; }
+  if (!Cloud.ready()){ obFinishNow(); renderAll(); goto('me'); return; }
   if (!Cloud.signedIn()){ toast('צריך להתחבר קודם'); obStep(1); return; }
 
   const btn = $('obIdentGo'), label = btn.textContent;
+  $('obIdentErr').hidden = true;
   btn.textContent = 'רגע…'; btn.disabled = true;
   try {
-    if (await Cloud.usernameTaken(uname)){ toast('שם המשתמש כבר תפוס, נסה אחר'); return; }
+    if (await Cloud.usernameTaken(uname)){ showIdentErr('שם המשתמש כבר תפוס, נסה אחר'); return; }
     await Cloud.saveProfile({
       username: uname,
       display_name: $('obName').value,
       role: segValue('obRole')
     });
     await loadMe();
-    /* אם נכנסנו רק בשביל שם משתמש, או שכבר יש פרטים אישיים —
-       אין מה להמשיך, סוגרים. */
+
+    /* «המשך» סוגר ומחזיר לאפליקציה. אם עדיין אין פרטים אישיים
+       שמורים, במקום לכלוא את המשתמש בעוד שלב — פותחים לו את מסך
+       הפרופיל, ששם ממילא יושבים אותם שדות. */
     const existing = await Store.get('maazan:profile');
-    if (obFlow === 'identity' || onbDone() || existing){
-      obFinishNow();
-      renderAll();
+    obFinishNow();
+    renderAll();
+    renderTargets();
+    if (!existing){
+      goto('me');
+      toast('שם המשתמש נשמר. השלם גיל, גובה ומשקל כדי לקבל יעד מדויק.');
+    } else {
+      goto('home');
       toast('שם המשתמש נשמר');
-      return;
     }
-    obPrefill(); obStep(3);
   } catch(e){
     /* המפתח הייחודי במסד הוא ההגנה האמיתית מפני כפילות */
     const m = String((e && e.message) || e);
     console.error('identity save failed:', e);
-    toast(/409|duplicate|unique/i.test(m) ? 'שם המשתמש כבר תפוס, נסה אחר' : m);
+    showIdentErr(/409|duplicate|unique/i.test(m)
+      ? 'שם המשתמש כבר תפוס, נסה אחר'
+      : 'השמירה נכשלה: ' + m);
   } finally {
     btn.textContent = label; btn.disabled = false;
   }
@@ -1496,7 +1514,7 @@ function maybeOnboard(){
    שורות של מתאמן רק כשקיים קישור מאושר. הקוד כאן הוא הממשק,
    לא ההגנה — ביטול אישור סוגר את הגישה גם אם הקוד לא ידע על כך.
    ============================================================ */
-const APP_VERSION = 35;
+const APP_VERSION = 37;
 const USERNAME_RE = /^[a-z0-9._-]{3,20}$/i;
 let coachTimer = null;
 
