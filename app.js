@@ -4,96 +4,8 @@
    ============================================================ */
 
 /* ---------- food database (per 100 g) ---------- */
-const FOODS = [
-  {n:'חזה עוף צלוי',g:'בשר ודגים',k:165,p:31,c:0,f:3.6},
-  {n:'שוק עוף בתנור',g:'בשר ודגים',k:209,p:26,c:0,f:11},
-  {n:'שניצל עוף מטוגן',g:'בשר ודגים',k:297,p:20,c:15,f:17},
-  {n:'חזה הודו',g:'בשר ודגים',k:135,p:29,c:0,f:1.5},
-  {n:'בשר בקר טחון 15%',g:'בשר ודגים',k:250,p:26,c:0,f:15},
-  {n:'אנטרקוט',g:'בשר ודגים',k:271,p:25,c:0,f:19},
-  {n:'סלמון',g:'בשר ודגים',k:208,p:20,c:0,f:13},
-  {n:'טונה במים, מסוננת',g:'בשר ודגים',k:116,p:26,c:0,f:1,u:['קופסה (140 ג׳)',140]},
-  {n:'דג דניס',g:'בשר ודגים',k:96,p:20,c:0,f:1.5},
-  {n:'ביצה',g:'בשר ודגים',k:155,p:13,c:1.1,f:11,u:['ביצה גדולה (55 ג׳)',55]},
-  {n:'חלבון ביצה',g:'בשר ודגים',k:52,p:11,c:0.7,f:0.2,u:['חלבון אחד (33 ג׳)',33]},
-  {n:'טופו',g:'בשר ודגים',k:76,p:8,c:1.9,f:4.8},
-  {n:'אבקת חלבון (וואי)',g:'בשר ודגים',k:380,p:75,c:8,f:5,u:['מנה (30 ג׳)',30]},
+/* מאגר המזון עבר ל-foods.js — 352 פריטים עם שם אנגלי לחיפוש */
 
-  {n:'קוטג׳ 5%',g:'מוצרי חלב',k:103,p:11,c:3.5,f:5,u:['גביע (250 ג׳)',250]},
-  {n:'גבינה לבנה 5%',g:'מוצרי חלב',k:95,p:11,c:4,f:5},
-  {n:'יוגורט יווני 0%',g:'מוצרי חלב',k:59,p:10,c:3.6,f:0.4,u:['גביע (150 ג׳)',150]},
-  {n:'יוגורט טבעי 3%',g:'מוצרי חלב',k:61,p:3.5,c:4.7,f:3,u:['גביע (150 ג׳)',150]},
-  {n:'חלב 3%',g:'מוצרי חלב',k:61,p:3.3,c:4.7,f:3.3,u:['כוס (240 מ״ל)',240]},
-  {n:'חלב 1%',g:'מוצרי חלב',k:42,p:3.4,c:5,f:1,u:['כוס (240 מ״ל)',240]},
-  {n:'גבינה צהובה 28%',g:'מוצרי חלב',k:350,p:25,c:1.5,f:28,u:['פרוסה (25 ג׳)',25]},
-  {n:'לבנה 5%',g:'מוצרי חלב',k:120,p:8,c:4,f:8},
-  {n:'קפה הפוך',g:'מוצרי חלב',k:45,p:2.4,c:3.5,f:2.4,u:['כוס גדולה (240 מ״ל)',240]},
-
-  {n:'אורז לבן מבושל',g:'פחמימות',k:130,p:2.7,c:28,f:0.3},
-  {n:'אורז מלא מבושל',g:'פחמימות',k:112,p:2.6,c:23,f:0.9},
-  {n:'פסטה מבושלת',g:'פחמימות',k:158,p:5.8,c:31,f:0.9},
-  {n:'קוסקוס מבושל',g:'פחמימות',k:112,p:3.8,c:23,f:0.2},
-  {n:'בורגול מבושל',g:'פחמימות',k:83,p:3,c:19,f:0.2},
-  {n:'קינואה מבושלת',g:'פחמימות',k:120,p:4.4,c:21,f:1.9},
-  {n:'תפוח אדמה אפוי',g:'פחמימות',k:93,p:2.5,c:21,f:0.1},
-  {n:'בטטה אפויה',g:'פחמימות',k:90,p:2,c:21,f:0.1},
-  {n:'לחם לבן',g:'פחמימות',k:265,p:9,c:49,f:3.2,u:['פרוסה (30 ג׳)',30]},
-  {n:'לחם מלא',g:'פחמימות',k:247,p:13,c:41,f:3.4,u:['פרוסה (30 ג׳)',30]},
-  {n:'פיתה',g:'פחמימות',k:275,p:9,c:55,f:1.2,u:['פיתה (60 ג׳)',60]},
-  {n:'טורטייה',g:'פחמימות',k:310,p:8,c:50,f:8,u:['טורטייה (50 ג׳)',50]},
-  {n:'שיבולת שועל יבשה',g:'פחמימות',k:379,p:13,c:67,f:7,u:['כוס (80 ג׳)',80]},
-  {n:'קורנפלקס',g:'פחמימות',k:357,p:7,c:84,f:0.4},
-
-  {n:'חומוס גרגרים מבושל',g:'קטניות',k:164,p:8.9,c:27,f:2.6},
-  {n:'עדשים מבושלות',g:'קטניות',k:116,p:9,c:20,f:0.4},
-  {n:'שעועית לבנה מבושלת',g:'קטניות',k:127,p:8.7,c:23,f:0.5},
-  {n:'אדממה',g:'קטניות',k:121,p:12,c:9,f:5},
-
-  {n:'חומוס ממרח',g:'ממרחים ושומנים',k:177,p:8,c:15,f:9,u:['כף (25 ג׳)',25]},
-  {n:'טחינה גולמית',g:'ממרחים ושומנים',k:595,p:17,c:21,f:54,u:['כף (15 ג׳)',15]},
-  {n:'טחינה מוכנה',g:'ממרחים ושומנים',k:300,p:9,c:10,f:26,u:['כף (18 ג׳)',18]},
-  {n:'שמן זית',g:'ממרחים ושומנים',k:884,p:0,c:0,f:100,u:['כף (13 ג׳)',13]},
-  {n:'חמאה',g:'ממרחים ושומנים',k:717,p:0.9,c:0.1,f:81,u:['כף (14 ג׳)',14]},
-  {n:'חמאת בוטנים',g:'ממרחים ושומנים',k:588,p:25,c:20,f:50,u:['כף (16 ג׳)',16]},
-  {n:'מיונז',g:'ממרחים ושומנים',k:680,p:1,c:1.3,f:75,u:['כף (14 ג׳)',14]},
-  {n:'אבוקדו',g:'ממרחים ושומנים',k:160,p:2,c:9,f:15,u:['אבוקדו בינוני (150 ג׳)',150]},
-
-  {n:'שקדים',g:'אגוזים',k:579,p:21,c:22,f:50,u:['חופן (28 ג׳)',28]},
-  {n:'אגוזי מלך',g:'אגוזים',k:654,p:15,c:14,f:65,u:['חופן (28 ג׳)',28]},
-  {n:'בוטנים',g:'אגוזים',k:567,p:26,c:16,f:49,u:['חופן (28 ג׳)',28]},
-  {n:'קשיו',g:'אגוזים',k:553,p:18,c:30,f:44,u:['חופן (28 ג׳)',28]},
-
-  {n:'מלפפון',g:'ירקות',k:15,p:0.7,c:3.6,f:0.1},
-  {n:'עגבנייה',g:'ירקות',k:18,p:0.9,c:3.9,f:0.2},
-  {n:'חסה',g:'ירקות',k:15,p:1.4,c:2.9,f:0.2},
-  {n:'גזר',g:'ירקות',k:41,p:0.9,c:10,f:0.2},
-  {n:'פלפל אדום',g:'ירקות',k:31,p:1,c:6,f:0.3},
-  {n:'בצל',g:'ירקות',k:40,p:1.1,c:9.3,f:0.1},
-  {n:'ברוקולי',g:'ירקות',k:34,p:2.8,c:7,f:0.4},
-  {n:'תירס מבושל',g:'ירקות',k:96,p:3.4,c:21,f:1.5},
-
-  {n:'תפוח',g:'פירות',k:52,p:0.3,c:14,f:0.2,u:['תפוח בינוני (180 ג׳)',180]},
-  {n:'בננה',g:'פירות',k:89,p:1.1,c:23,f:0.3,u:['בננה בינונית (120 ג׳)',120]},
-  {n:'תפוז',g:'פירות',k:47,p:0.9,c:12,f:0.1,u:['תפוז בינוני (150 ג׳)',150]},
-  {n:'ענבים',g:'פירות',k:69,p:0.7,c:18,f:0.2},
-  {n:'אבטיח',g:'פירות',k:30,p:0.6,c:8,f:0.2},
-  {n:'תותים',g:'פירות',k:32,p:0.7,c:7.7,f:0.3},
-  {n:'תמר מג׳הול',g:'פירות',k:277,p:1.8,c:75,f:0.2,u:['תמר (24 ג׳)',24]},
-
-  {n:'פלאפל',g:'רחוב וחטיפים',k:333,p:13,c:32,f:18,u:['כדור (17 ג׳)',17]},
-  {n:'פיצה',g:'רחוב וחטיפים',k:266,p:11,c:33,f:10,u:['משולש (110 ג׳)',110]},
-  {n:'צ׳יפס בתנור',g:'רחוב וחטיפים',k:220,p:3,c:34,f:8},
-  {n:'במבה',g:'רחוב וחטיפים',k:542,p:14,c:50,f:32,u:['שקית (25 ג׳)',25]},
-  {n:'ביסלי',g:'רחוב וחטיפים',k:480,p:9,c:63,f:21,u:['שקית (35 ג׳)',35]},
-  {n:'שוקולד חלב',g:'רחוב וחטיפים',k:546,p:7.7,c:59,f:31,u:['שורה (25 ג׳)',25]},
-  {n:'עוגיית שוקולד צ׳יפס',g:'רחוב וחטיפים',k:474,p:5,c:63,f:22,u:['עוגייה (16 ג׳)',16]},
-
-  {n:'קולה',g:'משקאות',k:42,p:0,c:10.6,f:0,u:['פחית (330 מ״ל)',330]},
-  {n:'קולה זירו',g:'משקאות',k:0.3,p:0,c:0,f:0,u:['פחית (330 מ״ל)',330]},
-  {n:'מיץ תפוזים',g:'משקאות',k:45,p:0.7,c:10.4,f:0.2,u:['כוס (240 מ״ל)',240]},
-  {n:'בירה',g:'משקאות',k:43,p:0.5,c:3.6,f:0,u:['בקבוק (330 מ״ל)',330]},
-  {n:'משקה איזוטוני',g:'משקאות',k:25,p:0,c:6,f:0,u:['בקבוק (500 מ״ל)',500]}
-];
 
 const MEALS = [
   {id:'breakfast', name:'ארוחת בוקר'},
@@ -103,7 +15,13 @@ const MEALS = [
 ];
 
 const DAYS = ['א','ב','ג','ד','ה','ו','ש'];
-const WATER_CUPS = 8, CUP_ML = 250;
+const CUP_ML = 250;
+/* מספר הכוסות נגזר מהיעד ולא קבוע על 8, אחרת שינוי היעד
+   לא היה משנה כלום במסך. */
+function waterCups(){
+  const liters = compute().water || 2;
+  return Math.max(4, Math.min(16, Math.round(liters * 1000 / CUP_ML)));
+}
 
 /* ---------- storage ---------- */
 const Store = (() => {
@@ -144,7 +62,7 @@ function stamp(k){
 /* ---------- state ---------- */
 const state = {
   profile:{sex:'male', age:28, height:178, weight:80, activity:1.55, goal:-0.5,
-           tgt:{on:false, kcal:null, p:null, c:null, f:null}},
+           tgt:{on:false, kcal:null, p:null, water:null}},
   date: todayKey(),
   log: emptyLog(),
   custom: [], recent: [], weights: {},
@@ -178,7 +96,10 @@ function debounce(fn, ms){
 
 function nf(n){ return Math.round(n).toLocaleString('he-IL'); }
 function esc(s){ return String(s).replace(/[&<>"']/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch])); }
-function allFoods(){ return state.custom.concat(FOODS); }
+function allFoods(){
+  const base = (typeof FOODS !== 'undefined' && Array.isArray(FOODS)) ? FOODS : [];
+  return state.custom.concat(base);
+}
 
 /* ---------- calculations ---------- */
 /* ignoreManual=true מחזיר את החישוב הנקי, כדי שנוכל להציג
@@ -206,10 +127,20 @@ function compute(P, ignoreManual){
      מסתנכרנים ותקפים גם בתצוגה של המאמן. */
   const t = P.tgt;
   if (!ignoreManual && t && t.on){
-    if (t.kcal > 0){ out.target = Math.round(t.kcal); out.clipped = false; }
-    if (t.p >= 0 && t.p !== null && t.p !== '') out.protein = Math.round(t.p);
-    if (t.c >= 0 && t.c !== null && t.c !== '') out.carbs   = Math.round(t.c);
-    if (t.f >= 0 && t.f !== null && t.f !== '') out.fat     = Math.round(t.f);
+    if (t.kcal > 0){
+      out.target = Math.round(t.kcal);
+      out.clipped = false;
+      /* פחמימות ושומן אינם נקבעים ידנית — הם מחושבים מחדש
+         סביב יעד הקלוריות והחלבון שנבחרו, כדי שהסכום יסתדר. */
+    }
+    if (t.p > 0) out.protein = Math.round(t.p);
+    if (t.water > 0) out.water = round(t.water, 1);
+
+    let fat2 = Math.round(out.target * 0.25 / 9);
+    const fatMin2 = Math.round(w * 0.8);
+    if (fat2 < fatMin2) fat2 = fatMin2;
+    out.fat = fat2;
+    out.carbs = Math.max(0, Math.round((out.target - out.protein*4 - out.fat*9) / 4));
     out.manual = true;
   }
   return out;
@@ -256,7 +187,8 @@ function renderProfile(){
   $('sTarget').innerHTML = nf(r.target) +
     '<small>' + (r.manual ? 'ידני' : 'קק״ל') + '</small>';
   $('sBmi').innerHTML    = round(r.bmi,1) + '<small>' + bmiCat(r.bmi) + '</small>';
-  $('sWater').innerHTML  = r.water + '<small>ליטר</small>';
+  $('sWater').innerHTML  = r.water +
+    '<small>' + (r.manual && state.profile.tgt && state.profile.tgt.water > 0 ? 'ידני' : 'ליטר') + '</small>';
   $('sProt').innerHTML   = r.protein +
     '<small>' + (r.manual ? 'ידני' : 'גרם') + '</small>';
   const note = $('floorNote');
@@ -337,11 +269,13 @@ function renderDiary(){
 }
 
 function renderWater(){
-  const n = state.log.water || 0;
+  const cups = waterCups();
+  const n = Math.min(state.log.water || 0, cups);
+  const goal = round(cups * CUP_ML / 1000, 2);
   $('water').innerHTML =
-    Array.from({length:WATER_CUPS}, (_,i) =>
+    Array.from({length:cups}, (_,i) =>
       '<button class="cup'+(i < n ? ' on' : '')+'" data-cup="'+(i+1)+'" aria-label="כוס '+(i+1)+'"></button>').join('') +
-    '<span class="waterlbl">'+round(n*CUP_ML/1000,2)+' ליטר</span>';
+    '<span class="waterlbl">'+round(n*CUP_ML/1000,2)+' / '+goal+' ליטר</span>';
 }
 
 function renderRecents(){
@@ -541,7 +475,10 @@ $('tabEx').addEventListener('click', () => showTab('ex'));
 
 function renderResults(query){
   const q = query.trim();
-  const list = allFoods().filter(f => !q || f.n.includes(q) || (f.g && f.g.includes(q))).slice(0,40);
+  const ql = q.toLowerCase();
+  const list = allFoods().filter(f =>
+    !q || f.n.includes(q) || (f.g && f.g.includes(q)) ||
+    (f.en && f.en.indexOf(ql) > -1)).slice(0, 60);
   $('results').innerHTML = list.length
     ? list.map(f => '<li data-name="'+esc(f.n)+'"><div class="nm"><b>'+esc(f.n)+'</b><span>'+esc(f.g||'מאכל שלי')+'</span></div>'+
         '<div class="kc">'+f.k+' קק״ל / 100 ג׳</div></li>').join('')
@@ -1221,7 +1158,8 @@ function dupIds(){
 /* ---------- יעדים ידניים ---------- */
 function tgtObj(){
   const P = state.profile;
-  if (!P.tgt) P.tgt = {on:false, kcal:null, p:null, c:null, f:null};
+  if (!P.tgt) P.tgt = {on:false, kcal:null, p:null, water:null};
+  if (!('water' in P.tgt)) P.tgt.water = null;   /* פרופיל מגרסה קודמת */
   return P.tgt;
 }
 
@@ -1234,12 +1172,11 @@ function renderTargets(){
 
   $('tgtKcal').placeholder = nf(auto.target);
   $('tgtP').placeholder = auto.protein;
-  $('tgtC').placeholder = auto.carbs;
-  $('tgtF').placeholder = auto.fat;
+  $('tgtWater').placeholder = auto.water;
   $('tgtHint').textContent =
-    'החישוב האוטומטי היה נותן ' + nf(auto.target) + ' קק״ל · ' +
-    auto.protein + '/' + auto.carbs + '/' + auto.fat + ' ג׳. ' +
-    'שדה שנשאר ריק ימשיך להתחשב בחישוב.';
+    'החישוב האוטומטי נותן ' + nf(auto.target) + ' קק״ל · ' + auto.protein +
+    ' ג׳ חלבון · ' + auto.water + ' ליטר. שדה ריק ממשיך לפי החישוב. ' +
+    'פחמימות ושומן מחושבים סביב מה שתקבע.';
 }
 
 $('tgtMode').addEventListener('click', async e => {
@@ -1249,33 +1186,33 @@ $('tgtMode').addEventListener('click', async e => {
   if (t.on){
     /* מעבר לידני ממלא את הערכים הנוכחיים, כדי שלא יקפוץ כלום */
     const auto = compute(state.profile, true);
-    if (!(t.kcal > 0)) t.kcal = auto.target;
-    if (!(t.p > 0))    t.p = auto.protein;
-    if (!(t.c > 0))    t.c = auto.carbs;
-    if (!(t.f > 0))    t.f = auto.fat;
-    ['tgtKcal','tgtP','tgtC','tgtF'].forEach((id, i) => {
-      $(id).value = [t.kcal, t.p, t.c, t.f][i];
+    if (!(t.kcal > 0))  t.kcal = auto.target;
+    if (!(t.p > 0))     t.p = auto.protein;
+    if (!(t.water > 0)) t.water = auto.water;
+    ['tgtKcal','tgtP','tgtWater'].forEach((id, i) => {
+      $(id).value = [t.kcal, t.p, t.water][i];
     });
   }
   await saveProfileNow();
-  renderTargets(); renderProfile(); renderSummary();
+  renderTargets(); renderProfile(); renderSummary(); renderWater();
   toast(t.on ? 'עברת ליעדים ידניים' : 'חזרת לחישוב האוטומטי');
 });
 
-[['tgtKcal','kcal'],['tgtP','p'],['tgtC','c'],['tgtF','f']].forEach(([id, key]) => {
+[['tgtKcal','kcal'],['tgtP','p'],['tgtWater','water']].forEach(([id, key]) => {
   $(id).addEventListener('input', () => {
     const v = $(id).value.trim();
     tgtObj()[key] = v === '' ? null : parseFloat(v);
     saveProfile();
     renderProfile(); renderSummary();
+    if (key === 'water') renderWater();
   });
 });
 
 $('tgtReset').addEventListener('click', async () => {
-  state.profile.tgt = {on:false, kcal:null, p:null, c:null, f:null};
-  ['tgtKcal','tgtP','tgtC','tgtF'].forEach(id => { $(id).value = ''; });
+  state.profile.tgt = {on:false, kcal:null, p:null, water:null};
+  ['tgtKcal','tgtP','tgtWater'].forEach(id => { $(id).value = ''; });
   await saveProfileNow();
-  renderTargets(); renderProfile(); renderSummary();
+  renderTargets(); renderProfile(); renderSummary(); renderWater();
   toast('היעדים חושבו מחדש לפי הפרטים שלך');
 });
 
@@ -1559,7 +1496,7 @@ function maybeOnboard(){
    שורות של מתאמן רק כשקיים קישור מאושר. הקוד כאן הוא הממשק,
    לא ההגנה — ביטול אישור סוגר את הגישה גם אם הקוד לא ידע על כך.
    ============================================================ */
-const APP_VERSION = 34;
+const APP_VERSION = 35;
 const USERNAME_RE = /^[a-z0-9._-]{3,20}$/i;
 let coachTimer = null;
 
@@ -2677,7 +2614,10 @@ $('dtQ').addEventListener('input', () => {
   const q = $('dtQ').value.trim();
   const box = $('dtResults');
   if (q.length < 2){ box.hidden = true; return; }
-  const rows = allFoods().filter(f => f.n.indexOf(q) > -1 || (f.g && f.g.indexOf(q) > -1)).slice(0, 8);
+  const ql = q.toLowerCase();
+  const rows = allFoods().filter(f =>
+    f.n.indexOf(q) > -1 || (f.g && f.g.indexOf(q) > -1) ||
+    (f.en && f.en.indexOf(ql) > -1)).slice(0, 8);
   if (!rows.length){ box.hidden = true; return; }
   box.innerHTML = rows.map(f =>
     '<button type="button" data-fn="' + esc(f.n) + '"><b>' + esc(f.n) + '</b>' +
@@ -2893,10 +2833,9 @@ window.addEventListener('appinstalled', () => { $('installBtn').hidden = true; }
   $('activity').value = P.activity; $('goal').value = P.goal;
   $('apiUrl').value = state.apiUrl;
   const t0 = tgtObj();
-  $('tgtKcal').value = t0.kcal != null ? t0.kcal : '';
-  $('tgtP').value = t0.p != null ? t0.p : '';
-  $('tgtC').value = t0.c != null ? t0.c : '';
-  $('tgtF').value = t0.f != null ? t0.f : '';
+  $('tgtKcal').value  = t0.kcal  != null ? t0.kcal  : '';
+  $('tgtP').value     = t0.p     != null ? t0.p     : '';
+  $('tgtWater').value = t0.water != null ? t0.water : '';
   renderAccount();
   if (Cloud.signedIn()){ await syncFromCloud(); await reloadEverything(); renderAccount(); }
   await loadLog();
