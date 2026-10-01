@@ -613,10 +613,10 @@ option{background:#1B1F2B;color:var(--text)}
     <!-- ============ PROGRESS ============ -->
     <section class="screen" id="scr-prog" hidden>
       <div class="segtabs" id="progTabs">
-        <button data-t="mine" aria-pressed="true">ההתקדמות שלי</button>
-        <button data-t="workouts" aria-pressed="false">האימונים שלי</button>
+        <button data-t="mine" aria-pressed="true">התקדמות</button>
+        <button data-t="workouts" aria-pressed="false">אימונים</button>
+        <button data-t="coaching" id="tabCoaching" aria-pressed="false" hidden>מתאמנים</button>
         <button data-t="friends" aria-pressed="false">חברים</button>
-        <button data-t="coaching" id="tabCoaching" aria-pressed="false" hidden>המתאמנים שלי</button>
       </div>
 
       <div id="prog-mine">
@@ -640,6 +640,9 @@ option{background:#1B1F2B;color:var(--text)}
         <div class="bhead"><h2>התפריט שלי</h2><span id="dietFrom"></span></div>
         <div class="daytabs" id="myDietDays"></div>
         <div id="myDietBody"></div>
+        <div class="btnrow" id="dietSelfRow" hidden>
+          <button class="btn" id="dietSelfEdit">בניית תפריט שבועי</button>
+        </div>
       </div>
       </div>
 
@@ -648,6 +651,9 @@ option{background:#1B1F2B;color:var(--text)}
           <div class="bhead"><h2>האימונים שלי</h2><span id="planCoach"></span></div>
           <div class="daytabs" id="wkDays"></div>
           <div id="wkBody"></div>
+          <div class="btnrow" id="wkSelfRow" hidden>
+            <button class="btn" id="wkSelfEdit">בניית תוכנית אימונים</button>
+          </div>
         </div>
         <div class="block">
           <div class="bhead"><h2>השבוע האחרון</h2></div>
@@ -1818,12 +1824,26 @@ const Cloud = (() => {
       body: o.body
     }, 15000);
     if (r.status === 401 && !retry){ await refresh(); return rest(path, opts, true); }
-    if (!r.ok){
-      let detail = '';
-      try { const j = await r.json(); detail = j.message || j.error_description || j.hint || ''; } catch(e){}
-      throw new Error('שגיאת שרת ' + r.status + (detail ? ': ' + detail : ''));
-    }
-    return r.status === 204 ? null : r.json();
+    if (!r.ok) throw new Error('שגיאת שרת ' + r.status + (await errDetail(r)));
+    return readJson(r);
+  }
+
+  /* Prefer: return=minimal מחזיר 201 עם גוף ריק — לא 204.
+     r.json() על גוף ריק זורק "Unexpected end of JSON input",
+     ולכן קוראים כטקסט ומפענחים רק אם יש מה לפענח. */
+  async function readJson(r){
+    if (r.status === 204 || r.status === 205) return null;
+    let text = '';
+    try { text = await r.text(); } catch(e){ return null; }
+    if (!text || !text.trim()) return null;
+    try { return JSON.parse(text); } catch(e){ return null; }
+  }
+
+  async function errDetail(r){
+    const j = await readJson(r);
+    if (!j) return '';
+    const d = j.message || j.error_description || j.hint || j.error || '';
+    return d ? ': ' + d : '';
   }
 
   /* ---------- נתונים ---------- */
@@ -2120,12 +2140,8 @@ const Cloud = (() => {
       }, o.headers || {}),
       body: o.body
     }, 30000);
-    if (!r.ok){
-      let detail = '';
-      try { const j = await r.json(); detail = j.message || j.error || ''; } catch(e){}
-      throw new Error('שגיאת אחסון ' + r.status + (detail ? ': ' + detail : ''));
-    }
-    return r.status === 204 ? null : r.json();
+    if (!r.ok) throw new Error('שגיאת אחסון ' + r.status + (await errDetail(r)));
+    return readJson(r);
   }
 
   /* הנתיב מתחיל במזהה הקישור, וזה מה שמדיניות האחסון בודקת */
@@ -3715,7 +3731,7 @@ function maybeOnboard(){
    שורות של מתאמן רק כשקיים קישור מאושר. הקוד כאן הוא הממשק,
    לא ההגנה — ביטול אישור סוגר את הגישה גם אם הקוד לא ידע על כך.
    ============================================================ */
-const APP_VERSION = 37;
+const APP_VERSION = 39;
 const USERNAME_RE = /^[a-z0-9._-]{3,20}$/i;
 let coachTimer = null;
 
@@ -4316,15 +4332,26 @@ function renderDayTabs(el, active, counts, onPick){
   };
 }
 
+/* linkId ריק = תוכנית אישית. היא נשמרת במפתח רגיל של המשתמש,
+   כלומר מסתנכרנת לענן כמו כל שאר הנתונים — בלי טבלה נפרדת
+   ובלי קישור למאמן. */
+const SELF_PLAN_KEY = 'maazan:myplan';
+const SELF_DIET_KEY = 'maazan:mydiet';
+
 async function openPlan(linkId, traineeId, name){
-  planLink = linkId; planTrainee = traineeId; planDay = new Date().getDay();
-  $('planWith').textContent = 'תוכנית · ' + (name || '');
+  planLink = linkId || null; planTrainee = traineeId || null;
+  planDay = new Date().getDay();
+  $('planWith').textContent = planLink ? ('תוכנית · ' + (name || '')) : 'התוכנית שלי';
   $('planList').innerHTML = '<div class="empty"><i class="spin"></i>טוען…</div>';
   $('planPanel').hidden = false;
   document.body.style.overflow = 'hidden';
   try {
-    const row = await Cloud.getPlan(linkId);
-    planData = normalizePlan(row && row.plan);
+    if (planLink){
+      const row = await Cloud.getPlan(planLink);
+      planData = normalizePlan(row && row.plan);
+    } else {
+      planData = normalizePlan(JSON.parse(await Store.get(SELF_PLAN_KEY) || 'null'));
+    }
   } catch(e){ planData = emptyPlan(); }
   drawPlanEditor();
 }
@@ -4397,9 +4424,11 @@ $('planSave').addEventListener('click', async () => {
   const btn = $('planSave'), label = btn.textContent;
   btn.textContent = 'שומר…'; btn.disabled = true;
   try {
-    await Cloud.savePlan(planLink, planTrainee, planData);
+    if (planLink) await Cloud.savePlan(planLink, planTrainee, planData);
+    else await Store.set(SELF_PLAN_KEY, JSON.stringify(planData));
     toast('התוכנית נשמרה');
     closePlan();
+    if (!planLink && state.screen === 'prog') loadMyWorkouts();
   } catch(e){
     toast(String((e && e.message) || e));
   } finally { btn.textContent = label; btn.disabled = false; }
@@ -4419,13 +4448,12 @@ async function approvedLink(){
   return linksCache;
 }
 
-const PROG_TABS = ['mine','workouts','friends','coaching'];
+const PROG_TABS = ['mine','workouts','coaching','friends'];
 
 function progTab(t){
   [...$('progTabs').children].forEach(x =>
     x.setAttribute('aria-pressed', String(x.dataset.t === t)));
   PROG_TABS.forEach(k => { $('prog-' + k).hidden = (k !== t); });
-  if (t === 'mine') loadMyDiet();
   if (t === 'mine') loadMyDiet();
   if (t === 'workouts') loadMyWorkouts();
   if (t === 'coaching') refreshCoach(); else stopLive();
@@ -4445,13 +4473,30 @@ async function loadMyWorkouts(){
   }
   try {
     myLink = await approvedLink();
+
+    /* בלי מאמן — התוכנית שבנית בעצמך. הסימון נשמר מקומית,
+       כי אין קישור שאפשר לתלות עליו יומן בענן. */
     if (!myLink){
-      $('planCoach').textContent = '';
-      $('wkBody').innerHTML = '<div class="empty">אין לך עדיין מאמן מקושר. ' +
-        'כשמאמן יבקש גישה ותאשר, התוכנית שלו תופיע כאן.</div>';
-      $('wkHistory').innerHTML = '';
+      $('planCoach').textContent = 'תוכנית אישית';
+      $('wkSelfRow').hidden = false;
+      wkPlan = normalizePlan(JSON.parse(await Store.get(SELF_PLAN_KEY) || 'null'));
+      const has = DAY_KEYS.some(k => wkPlan[k].length);
+      if (!has){
+        $('planCoach').textContent = '';
+        $('wkBody').innerHTML = '<div class="empty">אין לך עדיין תוכנית אימונים.<br>' +
+          'אפשר לבנות אחת בעצמך, או לחכות שמאמן יבקש גישה ויכין לך אותה.</div>';
+        $('wkHistory').innerHTML = '';
+        $('wkSelfEdit').textContent = 'בניית תוכנית אימונים';
+        return;
+      }
+      $('wkSelfEdit').textContent = 'עריכת התוכנית שלי';
+      wkDone = JSON.parse(await Store.get('maazan:wkdone:' + todayKey()) || '[]');
+      wkDay = new Date().getDay();
+      drawMyWorkouts();
+      drawWorkoutHistory();
       return;
     }
+    $('wkSelfRow').hidden = true;
     /* שלוש קריאות בלתי תלויות — במקביל */
     const [names, row, log] = await Promise.all([
       Cloud.profilesByIds([myLink.coach_id]).catch(() => ({})),
@@ -4520,7 +4565,8 @@ $('wkBody').addEventListener('change', async e => {
   if (cnt) cnt.textContent = wkDone.length + ' / ' + list.length;
 
   try {
-    await Cloud.setWorkoutLog(myLink.id, todayKey(), wkDone, all);
+    if (myLink) await Cloud.setWorkoutLog(myLink.id, todayKey(), wkDone, all);
+    else await Store.set('maazan:wkdone:' + todayKey(), JSON.stringify(wkDone));
     if (all) toast('כל הכבוד, סיימת את האימון של היום');
     refreshHistory();
   } catch(err){
@@ -4533,12 +4579,23 @@ $('wkBody').addEventListener('change', async e => {
 const refreshHistory = debounce(() => drawWorkoutHistory(), 900);
 
 async function drawWorkoutHistory(){
-  if (!myLink){ $('wkHistory').innerHTML = ''; return; }
-  const from = new Date(); from.setDate(from.getDate() - 6);
-  let rows = [];
-  try { rows = await Cloud.recentWorkoutLogs(myLink.id, todayKey(from)); } catch(e){}
   const byDate = {};
-  rows.forEach(r => { byDate[r.log_date] = r; });
+  if (myLink){
+    const from = new Date(); from.setDate(from.getDate() - 6);
+    let rows = [];
+    try { rows = await Cloud.recentWorkoutLogs(myLink.id, todayKey(from)); } catch(e){}
+    rows.forEach(r => { byDate[r.log_date] = r; });
+  } else {
+    /* תוכנית אישית: היומן מקומי, יום-יום */
+    for (let i = 6; i >= 0; i--){
+      const d = new Date(); d.setDate(d.getDate() - i);
+      const k = todayKey(d);
+      let done = [];
+      try { done = JSON.parse(await Store.get('maazan:wkdone:' + k) || '[]'); } catch(e){}
+      const planned = wkPlan ? wkPlan[DAY_KEYS[d.getDay()]].length : 0;
+      if (done.length) byDate[k] = {log_date:k, done, completed: planned > 0 && done.length >= planned};
+    }
+  }
 
   const cells = [];
   for (let i = 6; i >= 0; i--){
@@ -4768,8 +4825,9 @@ function dietKey(i){ return (i.t || '') + '|' + (i.n || '') + '|' + (i.q || '');
 
 /* ---------- צד המאמן ---------- */
 async function openDiet(linkId, traineeId, name){
-  dietLink = linkId; dietTrainee = traineeId; dietDay = new Date().getDay(); dtPick = null;
-  $('dietWith').textContent = 'תפריט · ' + (name || '');
+  dietLink = linkId || null; dietTrainee = traineeId || null;
+  dietDay = new Date().getDay(); dtPick = null;
+  $('dietWith').textContent = dietLink ? ('תפריט · ' + (name || '')) : 'התפריט שלי';
   $('dtMeal').innerHTML = DIET_MEALS.map(m => '<option>' + m + '</option>').join('');
   $('dtQ').value = ''; $('dtResults').hidden = true; $('dtPicked').hidden = true;
   $('dietList').innerHTML = '<div class="empty"><i class="spin"></i>טוען…</div>';
@@ -4778,8 +4836,12 @@ async function openDiet(linkId, traineeId, name){
   panel.hidden = false;
   document.body.style.overflow = 'hidden';
   try {
-    const row = await Cloud.getMealPlan(linkId);
-    dietData = normalizeDiet(row && row.plan);
+    if (dietLink){
+      const row = await Cloud.getMealPlan(dietLink);
+      dietData = normalizeDiet(row && row.plan);
+    } else {
+      dietData = normalizeDiet(JSON.parse(await Store.get(SELF_DIET_KEY) || 'null'));
+    }
   } catch(e){ dietData = emptyDiet(); }
   drawDietEditor();
 }
@@ -4907,9 +4969,11 @@ $('dietSave').addEventListener('click', async () => {
   const btn = $('dietSave'), label = btn.textContent;
   btn.textContent = 'שומר…'; btn.disabled = true;
   try {
-    await Cloud.saveMealPlan(dietLink, dietTrainee, dietData);
+    if (dietLink) await Cloud.saveMealPlan(dietLink, dietTrainee, dietData);
+    else await Store.set(SELF_DIET_KEY, JSON.stringify(dietData));
     toast('התפריט נשמר');
     closeDiet();
+    if (!dietLink && state.screen === 'prog') loadMyDiet();
   } catch(e){ toast(String((e && e.message) || e)); }
   finally { btn.textContent = label; btn.disabled = false; }
 });
@@ -4918,10 +4982,35 @@ $('dietSave').addEventListener('click', async () => {
 let myDietLink = null, myDietDay = new Date().getDay(), myDiet = null, myDietDone = [];
 
 async function loadMyDiet(){
+  /* הבלוק תמיד מוצג כשמחוברים — גם בלי מאמן וגם בלי תפריט,
+     אחרת אין מאיפה להתחיל לבנות אחד. */
   if (!Cloud.signedIn()){ $('dietBlock').hidden = true; return; }
+  $('dietBlock').hidden = false;
   try {
     myDietLink = await approvedLink();
-    if (!myDietLink){ $('dietBlock').hidden = true; return; }
+
+    if (!myDietLink){
+      $('dietFrom').textContent = 'תפריט אישי';
+      $('dietSelfRow').hidden = false;
+      myDiet = normalizeDiet(JSON.parse(await Store.get(SELF_DIET_KEY) || 'null'));
+      const has = DAY_KEYS.some(k => myDiet[k].length);
+      if (!has){
+        $('dietFrom').textContent = '';
+        $('myDietDays').innerHTML = '';
+        $('myDietBody').innerHTML = '<div class="empty">אין לך עדיין תפריט שבועי.<br>' +
+          'אפשר לבנות אחד בעצמך מתוך מאגר המזון.</div>';
+        $('dietSelfEdit').textContent = 'בניית תפריט שבועי';
+        return;
+      }
+      $('dietSelfEdit').textContent = 'עריכת התפריט שלי';
+      try { myDietDone = JSON.parse(await Store.get('maazan:dietdone:' + todayKey()) || '[]'); }
+      catch(e){ myDietDone = []; }
+      myDietDay = new Date().getDay();
+      drawMyDiet();
+      return;
+    }
+    $('dietSelfRow').hidden = true;
+
     const row = await Cloud.getMealPlan(myDietLink.id);
     myDiet = normalizeDiet(row && row.plan);
     const any = DAY_KEYS.some(k => myDiet[k].length);
@@ -4937,6 +5026,10 @@ async function loadMyDiet(){
     drawMyDiet();
   } catch(e){ $('dietBlock').hidden = true; }
 }
+
+/* כפתורי הבנייה העצמית */
+$('wkSelfEdit').addEventListener('click', () => openPlan(null, null, ''));
+$('dietSelfEdit').addEventListener('click', () => openDiet(null, null, ''));
 
 function drawMyDiet(){
   const counts = {};
@@ -5005,7 +5098,10 @@ $('myDietBody').addEventListener('change', async e => {
   const k = cb.dataset.dk;
   if (cb.checked){ if (myDietDone.indexOf(k) === -1) myDietDone.push(k); }
   else myDietDone = myDietDone.filter(x => x !== k);
-  try { await Cloud.setDietLog(myDietLink.id, todayKey(), myDietDone); }
+  try {
+    if (myDietLink) await Cloud.setDietLog(myDietLink.id, todayKey(), myDietDone);
+    else await Store.set('maazan:dietdone:' + todayKey(), JSON.stringify(myDietDone));
+  }
   catch(err){ toast(String((err && err.message) || err)); cb.checked = !cb.checked; }
 });
 

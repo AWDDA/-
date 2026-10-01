@@ -613,10 +613,10 @@ option{background:#1B1F2B;color:var(--text)}
     <!-- ============ PROGRESS ============ -->
     <section class="screen" id="scr-prog" hidden>
       <div class="segtabs" id="progTabs">
-        <button data-t="mine" aria-pressed="true">ההתקדמות שלי</button>
-        <button data-t="workouts" aria-pressed="false">האימונים שלי</button>
+        <button data-t="mine" aria-pressed="true">התקדמות</button>
+        <button data-t="workouts" aria-pressed="false">אימונים</button>
+        <button data-t="coaching" id="tabCoaching" aria-pressed="false" hidden>מתאמנים</button>
         <button data-t="friends" aria-pressed="false">חברים</button>
-        <button data-t="coaching" id="tabCoaching" aria-pressed="false" hidden>המתאמנים שלי</button>
       </div>
 
       <div id="prog-mine">
@@ -640,6 +640,9 @@ option{background:#1B1F2B;color:var(--text)}
         <div class="bhead"><h2>התפריט שלי</h2><span id="dietFrom"></span></div>
         <div class="daytabs" id="myDietDays"></div>
         <div id="myDietBody"></div>
+        <div class="btnrow" id="dietSelfRow" hidden>
+          <button class="btn" id="dietSelfEdit">בניית תפריט שבועי</button>
+        </div>
       </div>
       </div>
 
@@ -648,6 +651,9 @@ option{background:#1B1F2B;color:var(--text)}
           <div class="bhead"><h2>האימונים שלי</h2><span id="planCoach"></span></div>
           <div class="daytabs" id="wkDays"></div>
           <div id="wkBody"></div>
+          <div class="btnrow" id="wkSelfRow" hidden>
+            <button class="btn" id="wkSelfEdit">בניית תוכנית אימונים</button>
+          </div>
         </div>
         <div class="block">
           <div class="bhead"><h2>השבוע האחרון</h2></div>

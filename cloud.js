@@ -20,8 +20,8 @@
    ה-RLS ב-schema.sql, שאוכפת במסד עצמו שכל משתמש נוגע רק בשורות
    שלו. אל תשים כאן לעולם את ה-service_role key.
    ------------------------------------------------------------ */
-const SUPABASE_URL      = 'https://vgfckdehvkgcdgytjusj.supabase.co';
-const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZnZmNrZGVodmtnY2RneXRqdXNqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTA3OTA2MTMsImV4cCI6MjEwNjM2NjYxM30.e1VCM874MPRIsCsGyFeZTLNUoELiWgu43olOwc6Aj8Y';
+const SUPABASE_URL      = 'https://awkmwxthzypjelbceoex.supabase.co';
+const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImF3a213eHRoenlwamVsYmNlb2V4Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODg0MzEyNjAsImV4cCI6MjEwNDAwNzI2MH0.uO2C5VTKaEat1Dp-plR68qrNMtRuUZwRAYag2mOccTw';
 
 const Cloud = (() => {
   const LS = {
@@ -137,12 +137,26 @@ const Cloud = (() => {
       body: o.body
     }, 15000);
     if (r.status === 401 && !retry){ await refresh(); return rest(path, opts, true); }
-    if (!r.ok){
-      let detail = '';
-      try { const j = await r.json(); detail = j.message || j.error_description || j.hint || ''; } catch(e){}
-      throw new Error('שגיאת שרת ' + r.status + (detail ? ': ' + detail : ''));
-    }
-    return r.status === 204 ? null : r.json();
+    if (!r.ok) throw new Error('שגיאת שרת ' + r.status + (await errDetail(r)));
+    return readJson(r);
+  }
+
+  /* Prefer: return=minimal מחזיר 201 עם גוף ריק — לא 204.
+     r.json() על גוף ריק זורק "Unexpected end of JSON input",
+     ולכן קוראים כטקסט ומפענחים רק אם יש מה לפענח. */
+  async function readJson(r){
+    if (r.status === 204 || r.status === 205) return null;
+    let text = '';
+    try { text = await r.text(); } catch(e){ return null; }
+    if (!text || !text.trim()) return null;
+    try { return JSON.parse(text); } catch(e){ return null; }
+  }
+
+  async function errDetail(r){
+    const j = await readJson(r);
+    if (!j) return '';
+    const d = j.message || j.error_description || j.hint || j.error || '';
+    return d ? ': ' + d : '';
   }
 
   /* ---------- נתונים ---------- */
@@ -439,12 +453,8 @@ const Cloud = (() => {
       }, o.headers || {}),
       body: o.body
     }, 30000);
-    if (!r.ok){
-      let detail = '';
-      try { const j = await r.json(); detail = j.message || j.error || ''; } catch(e){}
-      throw new Error('שגיאת אחסון ' + r.status + (detail ? ': ' + detail : ''));
-    }
-    return r.status === 204 ? null : r.json();
+    if (!r.ok) throw new Error('שגיאת אחסון ' + r.status + (await errDetail(r)));
+    return readJson(r);
   }
 
   /* הנתיב מתחיל במזהה הקישור, וזה מה שמדיניות האחסון בודקת */
