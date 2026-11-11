@@ -20,8 +20,8 @@
    ה-RLS ב-schema.sql, שאוכפת במסד עצמו שכל משתמש נוגע רק בשורות
    שלו. אל תשים כאן לעולם את ה-service_role key.
    ------------------------------------------------------------ */
-const SUPABASE_URL      = 'https://awkmwxthzypjelbceoex.supabase.co';
-const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImF3a213eHRoenlwamVsYmNlb2V4Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODg0MzEyNjAsImV4cCI6MjEwNDAwNzI2MH0.uO2C5VTKaEat1Dp-plR68qrNMtRuUZwRAYag2mOccTw';
+const SUPABASE_URL      = 'https://qbdmeivcwchegbnsbwhj.supabase.co';
+const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFiZG1laXZjd2NoZWdibnNid2hqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTQzOTU4MjQsImV4cCI6MjEwOTk3MTgyNH0.c6_fb_aada6eGchOodNAw7MmrIyiIQBm3KoUjTyE76U';
 
 const Cloud = (() => {
   const LS = {
